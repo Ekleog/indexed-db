@@ -58,7 +58,7 @@ impl TransactionBuilder {
         transaction: Fun,
     ) -> Result<Ret, crate::Error<Err>>
     where
-        Fun: FnOnce(Transaction<Err>) -> RetFut,
+        Fun: for<'a> FnOnce(Transaction<'a, Err>) -> RetFut,
         RetFut: Future<Output = Result<Ret, crate::Error<Err>>>,
     {
         let t = self
@@ -87,13 +87,13 @@ thread_local! {
     static PENDING_REQUESTS: Cell<Option<usize>> = Cell::new(None);
 }
 
-pub struct Transaction<Err> {
+pub struct Transaction<'a, Err> {
     sys: IdbTransaction,
-    _phantom: PhantomData<Err>,
+    _phantom: PhantomData<&'a mut Err>,
 }
 
-impl<Err> Transaction<Err> {
-    fn from_sys(sys: IdbTransaction) -> Transaction<Err> {
+impl<'a, Err> Transaction<'a, Err> {
+    fn from_sys(sys: IdbTransaction) -> Transaction<'a, Err> {
         Transaction {
             sys,
             _phantom: PhantomData,
