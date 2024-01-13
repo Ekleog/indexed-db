@@ -1,3 +1,5 @@
+use web_sys::wasm_bindgen::{JsCast, JsValue};
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Clone, Debug, thiserror::Error)]
@@ -8,4 +10,11 @@ pub enum Error {
 
     #[error("IndexedDB is disabled")]
     IndexedDbDisabled,
+
+    #[error("Provided key is not valid for IndexedDB")]
+    InvalidKey,
+}
+
+pub(crate) fn name(v: &JsValue) -> Option<String> {
+    v.dyn_ref::<web_sys::DomException>().map(|v| v.name())
 }
