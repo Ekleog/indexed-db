@@ -71,6 +71,7 @@ async fn smoke_test() {
 
             // Run one simple addition
             stuffs.add(&JsString::from("foo")).await?;
+            assert_eq!(stuffs.count().await?, 1);
 
             // Run two additions in parallel
             let a = stuffs.add(&JsString::from("bar"));
@@ -78,6 +79,8 @@ async fn smoke_test() {
             let (a, b) = futures::join!(a, b);
             a?;
             b?;
+            assert_eq!(stuffs.count().await?, 2);
+            assert_eq!(objects.count().await?, 1);
 
             Ok::<_, indexed_db::Error<()>>(())
         })
@@ -90,6 +93,7 @@ async fn smoke_test() {
 
             // Clear objects
             objects.clear().await?;
+            assert_eq!(objects.count().await?, 0);
 
             Ok::<_, indexed_db::Error<()>>(())
         })
