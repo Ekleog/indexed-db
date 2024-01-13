@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+thiserror = "1.0"
+web-sys = { version = "0.3.66", features = ["Window"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.39"
