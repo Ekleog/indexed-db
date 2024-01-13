@@ -34,8 +34,8 @@ pub enum Error<E = Void> {
     #[error("Operation is not allowed by the user agent")]
     OperationNotAllowed,
 
-    /// Provided key is not valid for IndexedDB
-    #[error("Provided key is not valid for IndexedDB")]
+    /// Provided key is not valid
+    #[error("Provided key is not valid")]
     InvalidKey,
 
     /// Version must not be zero
@@ -65,6 +65,18 @@ pub enum Error<E = Void> {
     /// Database is closed
     #[error("Database is closed")]
     DatabaseIsClosed,
+
+    /// Object store was removed
+    #[error("Object store was removed")]
+    ObjectStoreWasRemoved,
+
+    /// Transaction is read-only
+    #[error("Transaction is read-only")]
+    ReadOnly,
+
+    /// Unable to clone
+    #[error("Unable to clone")]
+    FailedClone,
 
     /// User-provided error to pass through `indexed-db` code
     #[error(transparent)]
@@ -118,6 +130,9 @@ impl Error {
             Error::AlreadyExists => Error::AlreadyExists,
             Error::DoesNotExist => Error::DoesNotExist,
             Error::DatabaseIsClosed => Error::DatabaseIsClosed,
+            Error::ObjectStoreWasRemoved => Error::ObjectStoreWasRemoved,
+            Error::ReadOnly => Error::ReadOnly,
+            Error::FailedClone => Error::FailedClone,
             Error::User(u) => match u {},
         }
     }

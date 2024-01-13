@@ -1,5 +1,5 @@
 use std::marker::PhantomData;
-use web_sys::IdbObjectStore;
+use web_sys::{wasm_bindgen::JsValue, IdbObjectStore};
 
 /// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
 /// for use in transactions
@@ -16,5 +16,25 @@ impl<'a, Err> ObjectStore<'a, Err> {
             _phantom: PhantomData,
         }
     }
-    // TODO
+
+    /// Add the value `val` to this object store, and return its auto-computed key
+    ///
+    /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
+    pub async fn add(&self, value: &JsValue) -> Result<JsValue, crate::Error<Err>> {
+        let add_req = self.sys.add(value).map_err(|err| {
+            match crate::error::name(&err).as_ref().map(|s| s as &str) {
+                Some("ReadOnlyError") => crate::Error::ReadOnly,
+                Some("TransactionInactiveError") => {
+                    panic!("Tried adding to an ObjectStore while the transaction was inactive")
+                }
+                Some("DataError") => crate::Error::InvalidKey,
+                Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
+                Some("DataCloneError") => crate::Error::FailedClone,
+                Some("ConstraintError") => crate::Error::AlreadyExists,
+                _ => crate::Error::from_js_value(err),
+            }
+            .into_user()
+        })?;
+        todo!()
+    }
 }
