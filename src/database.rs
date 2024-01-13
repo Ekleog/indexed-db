@@ -42,6 +42,16 @@ impl Database {
             _ => crate::Error::from_js_value(err),
         })
     }
+
+    /// Closes this database connection
+    ///
+    /// Note that the closing will actually happen asynchronously with no way for the client to
+    /// identify when the database was closed.
+    ///
+    /// Internally, this uses [`IDBDatabase::close`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/close).
+    pub fn close(&self) {
+        self.sys.close();
+    }
 }
 
 pub struct ObjectStoreBuilder<'a> {

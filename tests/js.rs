@@ -32,7 +32,7 @@ async fn smoke_test() {
     factory.open("foo", 1, |_| Ok(())).await.unwrap_err();
 
     // Database::build_object_store
-    factory
+    let db = factory
         .open("bar", 1, |evt| {
             let db = evt.database();
             db.build_object_store("objects").create()?;
@@ -44,6 +44,7 @@ async fn smoke_test() {
         })
         .await
         .unwrap();
+    db.close();
     factory
         .open("bar", 2, |evt| {
             let db = evt.database();
