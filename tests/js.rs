@@ -44,4 +44,12 @@ async fn smoke_test() {
         })
         .await
         .unwrap();
+    factory
+        .open("bar", 2, |evt| {
+            let db = evt.database();
+            db.delete_object_store("stuffs")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
 }

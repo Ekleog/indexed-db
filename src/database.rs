@@ -4,6 +4,7 @@ use web_sys::{
     IdbDatabase, IdbObjectStoreParameters,
 };
 
+/// Wrapper for [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)
 #[derive(Debug)]
 pub struct Database {
     sys: IdbDatabase,
@@ -26,6 +27,20 @@ impl Database {
             name,
             options: IdbObjectStoreParameters::new(),
         }
+    }
+
+    /// Deletes an [`ObjectStore`]
+    ///
+    /// Note that this method can only be called from within an `on_upgrade_needed` callback.
+    ///
+    /// Internally, this uses [`IDBDatabase::deleteObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/deleteObjectStore).
+    pub fn delete_object_store(&self, name: &str) -> crate::Result<()> {
+        self.sys.delete_object_store(name).map_err(|err| match crate::error::name(&err).as_ref().map(|s| s as &str) {
+            Some("InvalidStateError") => crate::Error::InvalidCall,
+            Some("TransactionInactiveError") => panic!("Tried to create an object store with the `versionchange` transaction having already aborted"),
+            Some("NotFoundError") => crate::Error::DoesNotExist,
+            _ => crate::Error::from_js_value(err),
+        })
     }
 }
 
