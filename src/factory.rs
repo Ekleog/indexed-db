@@ -1,7 +1,7 @@
 use crate::{utils::generic_request, Database};
 use web_sys::wasm_bindgen::JsValue;
 
-/// Wrapper for [`IdbFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
+/// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
 pub struct Factory {
     sys: web_sys::IdbFactory,
 }
@@ -23,7 +23,7 @@ impl Factory {
     ///
     /// Returns an error if one of the two values would not be a valid IndexedDb key.
     ///
-    /// This internally uses [`IdbFactory::cmp`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/cmp).
+    /// This internally uses [`IDBFactory::cmp`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/cmp).
     pub fn cmp(&self, lhs: &JsValue, rhs: &JsValue) -> crate::Result<std::cmp::Ordering> {
         use std::cmp::Ordering::*;
         self.sys
@@ -32,7 +32,7 @@ impl Factory {
                 -1 => Less,
                 0 => Equal,
                 1 => Greater,
-                v => panic!("Unexpected result of IdbFactory::cmp: {v}"),
+                v => panic!("Unexpected result of IDBFactory::cmp: {v}"),
             })
             .map_err(
                 |e| match crate::error::name(&e).as_ref().map(|s| s as &str) {
@@ -49,7 +49,7 @@ impl Factory {
     /// Returns an error if something failed during the deletion. Note that trying to delete
     /// a database that does not exist will result in a successful result.
     ///
-    /// This internally uses [`IdbFactory::deleteDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/deleteDatabase)
+    /// This internally uses [`IDBFactory::deleteDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/deleteDatabase)
     pub async fn delete_database(&self, name: &str) -> crate::Result<()> {
         generic_request(
             self.sys
@@ -66,6 +66,9 @@ impl Factory {
     ///
     /// Returns an error if something failed while opening or upgrading the database.
     /// Blocks until it can actually open the database.
+    ///
+    /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
+    /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
     pub async fn open<E>(
         &self,
         _name: &str,
