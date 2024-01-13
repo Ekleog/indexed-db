@@ -103,6 +103,24 @@ impl Error {
                 .expect("IDBRequest::error did not return a DOMException"),
         )
     }
+
+    pub(crate) fn into_user<E>(self) -> Error<E> {
+        match self {
+            Error::NotInBrowser => Error::NotInBrowser,
+            Error::IndexedDbDisabled => Error::IndexedDbDisabled,
+            Error::OperationNotSupported => Error::OperationNotSupported,
+            Error::OperationNotAllowed => Error::OperationNotAllowed,
+            Error::InvalidKey => Error::InvalidKey,
+            Error::VersionMustNotBeZero => Error::VersionMustNotBeZero,
+            Error::VersionTooOld => Error::VersionTooOld,
+            Error::InvalidCall => Error::InvalidCall,
+            Error::InvalidArgument => Error::InvalidArgument,
+            Error::AlreadyExists => Error::AlreadyExists,
+            Error::DoesNotExist => Error::DoesNotExist,
+            Error::DatabaseIsClosed => Error::DatabaseIsClosed,
+            Error::User(u) => match u {},
+        }
+    }
 }
 
 pub(crate) fn name(v: &JsValue) -> Option<String> {

@@ -1,4 +1,4 @@
-use std::future::Future;
+use std::{future::Future, marker::PhantomData};
 use web_sys::{
     js_sys::{Array, JsString},
     wasm_bindgen::JsValue,
@@ -47,33 +47,42 @@ impl TransactionBuilder {
     /// returns an `Err` value, then it will be aborted.
     ///
     /// Internally, this uses [`IDBDatabase::transaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/transaction).
-    pub async fn run<Fun, RetFut, Ret>(self, _transaction: Fun) -> crate::Result<Ret>
+    pub async fn run<Fun, RetFut, Ret, Err>(
+        self,
+        transaction: Fun,
+    ) -> Result<Ret, crate::Error<Err>>
     where
-        Fun: FnOnce(Transaction) -> RetFut,
-        RetFut: Future<Output = Ret>,
+        Fun: FnOnce(Transaction<Err>) -> RetFut,
+        RetFut: Future<Output = Result<Ret, crate::Error<Ret>>>,
     {
         let t = Transaction::from_sys(
             self.db
                 .transaction_with_str_sequence_and_mode(&self.stores, self.mode)
-                .map_err(
-                    |err| match crate::error::name(&err).as_ref().map(|s| s as &str) {
+                .map_err(|err| {
+                    match crate::error::name(&err).as_ref().map(|s| s as &str) {
                         Some("InvalidStateError") => crate::Error::DatabaseIsClosed,
                         Some("NotFoundError") => crate::Error::DoesNotExist,
                         Some("InvalidAccessError") => crate::Error::InvalidArgument,
                         _ => crate::Error::from_js_value(err),
-                    },
-                )?,
+                    }
+                    .into_user()
+                })?,
         );
+        let future_to_poll = transaction(t);
         todo!()
     }
 }
 
-pub struct Transaction {
+pub struct Transaction<Err> {
     sys: IdbTransaction,
+    _phantom: PhantomData<Err>,
 }
 
-impl Transaction {
-    fn from_sys(sys: IdbTransaction) -> Transaction {
-        Transaction { sys }
+impl<Err> Transaction<Err> {
+    fn from_sys(sys: IdbTransaction) -> Transaction<Err> {
+        Transaction {
+            sys,
+            _phantom: PhantomData,
+        }
     }
 }
