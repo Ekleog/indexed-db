@@ -1,6 +1,5 @@
+use crate::{utils::generic_request, Database};
 use web_sys::wasm_bindgen::JsValue;
-
-use crate::utils::generic_request;
 
 /// Wrapper for [`IdbFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
 pub struct Factory {
@@ -62,4 +61,21 @@ impl Factory {
         .map(|_| ())
         .map_err(crate::Error::from_js_value)
     }
+
+    /// Open a database
+    ///
+    /// Returns an error if something failed while opening or upgrading the database.
+    /// Blocks until it can actually open the database.
+    pub async fn open<E>(
+        &self,
+        _name: &str,
+        _version: u32,
+        _upgrader: impl FnOnce(VersionChangeEvent) -> Result<(), crate::Error<E>>,
+    ) -> Result<Database, crate::Error<E>> {
+        todo!()
+    }
+}
+
+pub struct VersionChangeEvent {
+    // TODO
 }
