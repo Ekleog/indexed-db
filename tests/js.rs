@@ -75,7 +75,7 @@ async fn smoke_test() {
             // Run two additions in parallel
             let a = stuffs.add(&JsString::from("bar"));
             let b = objects.add_kv(&JsString::from("key"), &JsString::from("value"));
-            let (a, b) = tokio::join!(a, b);
+            let (a, b) = futures::join!(a, b);
             a?;
             b?;
             Ok::<_, indexed_db::Error<()>>(())

@@ -1,4 +1,5 @@
 use crate::{utils::generic_request, Database};
+use futures_channel::oneshot;
 use web_sys::{
     js_sys::Function,
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
@@ -92,7 +93,7 @@ impl Factory {
             .open_with_u32(name, version)
             .map_err(crate::Error::from_js_value)?;
 
-        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        let (tx, mut rx) = oneshot::channel();
         let closure = Closure::once(|evt: IdbVersionChangeEvent| {
             let evt = VersionChangeEvent::from_sys(evt);
             match upgrader(evt) {
@@ -112,8 +113,8 @@ impl Factory {
             .map_err(crate::Error::from_js_event)?;
 
         match rx.try_recv() {
-            Err(_) => (),
-            Ok(err) => return Err(err),
+            Ok(Some(err)) => return Err(err),
+            _ => (),
         }
 
         let db = open_req

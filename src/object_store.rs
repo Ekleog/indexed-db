@@ -1,5 +1,5 @@
 use crate::transaction::transaction_request;
-use futures_util::future::FutureExt;
+use futures_util::future::{Either, FutureExt};
 use std::{future::Future, marker::PhantomData};
 use web_sys::{wasm_bindgen::JsValue, IdbObjectStore};
 
@@ -24,8 +24,8 @@ impl<Err> ObjectStore<Err> {
     /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
     pub fn add(&self, value: &JsValue) -> impl Future<Output = Result<JsValue, crate::Error<Err>>> {
         match self.sys.add(value) {
-            Ok(add_req) => either::Left(transaction_request::<Err>(add_req)),
-            Err(e) => either::Right(std::future::ready(Err(map_add_err(e)))),
+            Ok(add_req) => Either::Left(transaction_request::<Err>(add_req)),
+            Err(e) => Either::Right(std::future::ready(Err(map_add_err(e)))),
         }
     }
 
@@ -39,9 +39,9 @@ impl<Err> ObjectStore<Err> {
     ) -> impl Future<Output = Result<(), crate::Error<Err>>> {
         match self.sys.add_with_key(value, key) {
             Ok(add_req) => {
-                either::Left(transaction_request::<Err>(add_req).map(|res| res.map(|_| ())))
+                Either::Left(transaction_request::<Err>(add_req).map(|res| res.map(|_| ())))
             }
-            Err(e) => either::Right(std::future::ready(Err(map_add_err(e)))),
+            Err(e) => Either::Right(std::future::ready(Err(map_add_err(e)))),
         }
     }
 }

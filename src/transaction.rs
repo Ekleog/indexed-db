@@ -1,4 +1,6 @@
 use crate::ObjectStore;
+use futures_channel::oneshot;
+use futures_util::future::{self, Either};
 use std::{
     cell::Cell, future::Future, marker::PhantomData, panic::AssertUnwindSafe, pin::Pin, task::Poll,
 };
@@ -89,8 +91,8 @@ thread_local! {
 pub(crate) async fn transaction_request<Err>(
     req: IdbRequest,
 ) -> Result<JsValue, crate::Error<Err>> {
-    let (success_tx, success_rx) = tokio::sync::oneshot::channel();
-    let (error_tx, error_rx) = tokio::sync::oneshot::channel();
+    let (success_tx, success_rx) = oneshot::channel();
+    let (error_tx, error_rx) = oneshot::channel();
 
     let on_success = Closure::once(|evt: web_sys::Event| success_tx.send(evt));
     let on_error = Closure::once(|evt: web_sys::Event| error_tx.send(evt));
@@ -107,9 +109,9 @@ pub(crate) async fn transaction_request<Err>(
         ))
     });
 
-    let res = tokio::select! {
-        res = success_rx => Ok(res.unwrap()),
-        res = error_rx => Err(res.unwrap()),
+    let res = match future::select(success_rx, error_rx).await {
+        Either::Left((res, _)) => Ok(res.unwrap()),
+        Either::Right((res, _)) => Err(res.unwrap()),
     };
 
     PENDING_REQUESTS.with(|p| {
