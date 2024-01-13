@@ -2,7 +2,7 @@ use std::{cell::RefCell, rc::Rc};
 use tokio::sync::oneshot;
 use web_sys::{
     js_sys::Function,
-    wasm_bindgen::{closure::Closure, JsCast, JsValue},
+    wasm_bindgen::{closure::Closure, JsCast},
     IdbRequest,
 };
 
@@ -31,7 +31,7 @@ impl<T> ResultChan<T> {
     }
 }
 
-pub(crate) async fn generic_request(req: IdbRequest) -> Result<JsValue, JsValue> {
+pub(crate) async fn generic_request(req: IdbRequest) -> Result<web_sys::Event, web_sys::Event> {
     let (tx, rx) = ResultChan::new();
     let on_success = Closure::once({
         let tx = tx.clone();

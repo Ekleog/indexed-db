@@ -4,6 +4,8 @@ use web_sys::wasm_bindgen::{JsCast, JsValue};
 pub type Result<T> = std::result::Result<T, Error>;
 
 // TODO: replace with ! once Rust 2024 lands
+// At this point we'll probably also be able to remove the `: std::error::Error` bounds everywhere,
+// and hopefully the `impl From for Error` too
 #[doc(hidden)]
 #[derive(Debug)]
 pub enum Void {}
@@ -35,9 +37,27 @@ pub enum Error<E = Void> {
     #[error("Provided key is not valid for IndexedDB")]
     InvalidKey,
 
+    /// Version must not be zero
+    #[error("Version must not be zero")]
+    VersionMustNotBeZero,
+
     /// User-provided error to pass through `indexed-db` code
     #[error(transparent)]
     User(#[from] E),
+}
+
+impl<E: std::error::Error> From<Error<Void>> for Error<E> {
+    fn from(o: Error<Void>) -> Error<E> {
+        match o {
+            Error::User(e) => match e {},
+            Error::NotInBrowser => Error::NotInBrowser,
+            Error::IndexedDbDisabled => Error::IndexedDbDisabled,
+            Error::OperationNotSupported => Error::OperationNotSupported,
+            Error::OperationNotAllowed => Error::OperationNotAllowed,
+            Error::InvalidKey => Error::InvalidKey,
+            Error::VersionMustNotBeZero => Error::VersionMustNotBeZero,
+        }
+    }
 }
 
 impl Error {
@@ -50,6 +70,21 @@ impl Error {
             "NotAllowedError" => crate::Error::OperationNotAllowed,
             _ => panic!("Unexpected error: {err:?}"),
         }
+    }
+
+    pub(crate) fn from_js_event(evt: web_sys::Event) -> Error {
+        let idb_request = evt
+            .target()
+            .expect("Trying to parse indexed_db::Error from an event that has no target")
+            .dyn_into::<web_sys::IdbRequest>()
+            .expect(
+                "Trying to parse indexed_db::Error from an event that is not from an IDBRequest",
+            );
+        Error::from_js_value(
+            idb_request
+                .result()
+                .expect("Failed to retrieve the error from the IDBRequest that called on_error"),
+        )
     }
 }
 

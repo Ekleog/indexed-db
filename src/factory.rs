@@ -1,5 +1,9 @@
 use crate::{utils::generic_request, Database};
-use web_sys::wasm_bindgen::JsValue;
+use web_sys::{
+    js_sys::Function,
+    wasm_bindgen::{closure::Closure, JsCast, JsValue},
+    IdbVersionChangeEvent,
+};
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
 pub struct Factory {
@@ -59,7 +63,7 @@ impl Factory {
         )
         .await
         .map(|_| ())
-        .map_err(crate::Error::from_js_value)
+        .map_err(crate::Error::from_js_event)
     }
 
     /// Open a database
@@ -67,18 +71,87 @@ impl Factory {
     /// Returns an error if something failed while opening or upgrading the database.
     /// Blocks until it can actually open the database.
     ///
+    /// Note that `version` must be at least `1`. `upgrader` will be called when `version` is higher than the previous
+    /// database version, or upon database creation.
+    ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
-    pub async fn open<E>(
+    pub async fn open(
         &self,
-        _name: &str,
-        _version: u32,
-        _upgrader: impl FnOnce(VersionChangeEvent) -> Result<(), crate::Error<E>>,
-    ) -> Result<Database, crate::Error<E>> {
-        todo!()
+        name: &str,
+        version: u32,
+        // TODO: this _could_ not take 'static, but that'd require an unsafe lifetime expansion in order to pass through
+        // the `Closure::once` bound. So, let's not do it until a reasonable use case arises.
+        upgrader: impl 'static + FnOnce(VersionChangeEvent) -> crate::Result<()>,
+    ) -> crate::Result<Database> {
+        let open_req =
+            self.sys.open_with_u32(name, version).map_err(|e| {
+                match crate::error::name(&e).as_ref().map(|s| s as &str) {
+                    Some("TypeError") => crate::Error::VersionMustNotBeZero,
+                    _ => crate::Error::from_js_value(e),
+                }
+            })?;
+
+        let (tx, mut rx) = tokio::sync::oneshot::channel();
+        let closure = Closure::once(|evt: IdbVersionChangeEvent| {
+            let evt = VersionChangeEvent::from_sys(evt);
+            match upgrader(evt) {
+                Ok(()) => (),
+                Err(e) => {
+                    tx.send(e);
+                    return;
+                }
+            }
+        });
+        open_req.set_onupgradeneeded(Some(closure.as_ref().dyn_ref::<Function>().unwrap()));
+
+        generic_request(open_req.clone().into())
+            .await
+            .map_err(crate::Error::from_js_event)?;
+
+        match rx.try_recv() {
+            Err(_) => (),
+            Ok(err) => return Err(err),
+        }
+
+        let db = open_req
+            .result()
+            .map_err(crate::Error::from_js_value)?
+            .dyn_into::<web_sys::IdbDatabase>()
+            .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
+
+        Ok(Database::from_sys(db))
     }
 }
 
+/// Wrapper for [`IDBVersionChangeEvent`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent)
 pub struct VersionChangeEvent {
-    // TODO
+    sys: IdbVersionChangeEvent,
+}
+
+impl VersionChangeEvent {
+    fn from_sys(sys: IdbVersionChangeEvent) -> VersionChangeEvent {
+        VersionChangeEvent { sys }
+    }
+
+    /// The version before the database upgrade, clamped to `u32::MAX`
+    ///
+    /// Internally, this uses [`IDBVersionChangeEvent::old_version`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent/oldVersion)
+    pub fn old_version(&self) -> u32 {
+        self.sys.old_version() as u32
+    }
+
+    /// The version after the database upgrade, clamped to `u32::MAX`
+    ///
+    /// Internally, this uses [`IDBVersionChangeEvent::new_version`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent/newVersion)
+    pub fn new_version(&self) -> u32 {
+        self.sys
+            .new_version()
+            .expect("IDBVersionChangeEvent did not provide a new version") as u32
+    }
+
+    /// The database under creation
+    pub fn database(&self) -> Database {
+        todo!()
+    }
 }
