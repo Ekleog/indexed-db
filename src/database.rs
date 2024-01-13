@@ -15,6 +15,37 @@ impl Database {
         Database { sys }
     }
 
+    /// The name of this database
+    ///
+    /// Internally, this uses [`IDBDatabase::name`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/name).
+    pub fn name(&self) -> String {
+        self.sys.name()
+    }
+
+    /// The version of this database, clamped at `u32::MAX`
+    ///
+    /// Internally, this uses [`IDBDatabase::version`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/version).
+    pub fn version(&self) -> u32 {
+        self.sys.version() as u32
+    }
+
+    /// The names of all [`ObjectStore`]s in this [`Database`]
+    ///
+    /// Internally, this uses [`IDBDatabase::objectStoreNames`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/objectStoreNames).
+    pub fn object_store_names(&self) -> Vec<String> {
+        let names = self.sys.object_store_names();
+        let len = names.length();
+        let mut res = Vec::with_capacity(usize::try_from(len).unwrap());
+        for i in 0..len {
+            res.push(
+                names
+                    .get(i)
+                    .expect("DOMStringList did not contain as many elements as its length"),
+            );
+        }
+        res
+    }
+
     /// Build an [`ObjectStore`]
     ///
     /// Note that this method can only be called from within an `on_upgrade_needed` callback. It returns

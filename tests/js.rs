@@ -44,8 +44,12 @@ async fn smoke_test() {
         })
         .await
         .unwrap();
+    assert_eq!(db.name(), "bar");
+    assert_eq!(db.version(), 1);
+    assert_eq!(db.object_store_names(), &["objects", "stuffs", "things"]);
     db.close();
-    factory
+
+    let db = factory
         .open("bar", 2, |evt| {
             let db = evt.database();
             db.delete_object_store("stuffs")?;
@@ -53,4 +57,7 @@ async fn smoke_test() {
         })
         .await
         .unwrap();
+    assert_eq!(db.name(), "bar");
+    assert_eq!(db.version(), 2);
+    assert_eq!(db.object_store_names(), &["objects", "things"]);
 }
