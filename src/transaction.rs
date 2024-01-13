@@ -200,6 +200,8 @@ where
             }
         };
         if let Poll::Ready(res) = res {
+            // Ignore the remaining pending requests: transaction will auto-commit when they are done
+            PENDING_REQUESTS.with(|p| p.set(None));
             return Poll::Ready(match res {
                 Ok(res) => Ok(res), // let transaction auto-commit
                 Err(err) => {

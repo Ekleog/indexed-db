@@ -78,6 +78,19 @@ async fn smoke_test() {
             let (a, b) = futures::join!(a, b);
             a?;
             b?;
+
+            Ok::<_, indexed_db::Error<()>>(())
+        })
+        .await
+        .unwrap();
+    db.transaction(&["objects", "stuffs"])
+        .rw()
+        .run(|t| async move {
+            let objects = t.object_store("objects")?;
+
+            // Clear objects
+            objects.clear().await?;
+
             Ok::<_, indexed_db::Error<()>>(())
         })
         .await
