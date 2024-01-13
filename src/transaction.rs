@@ -1,4 +1,4 @@
-use std::{future::Future, marker::PhantomData};
+use std::{future::Future, marker::PhantomData, pin::Pin, task::Poll};
 use web_sys::{
     js_sys::{Array, JsString},
     wasm_bindgen::JsValue,
@@ -53,7 +53,7 @@ impl TransactionBuilder {
     ) -> Result<Ret, crate::Error<Err>>
     where
         Fun: FnOnce(Transaction<Err>) -> RetFut,
-        RetFut: Future<Output = Result<Ret, crate::Error<Ret>>>,
+        RetFut: Future<Output = Result<Ret, crate::Error<Err>>>,
     {
         let t = Transaction::from_sys(
             self.db
@@ -68,8 +68,8 @@ impl TransactionBuilder {
                     .into_user()
                 })?,
         );
-        let future_to_poll = transaction(t);
-        todo!()
+        let fut = transaction(t);
+        TransactionPoller { fut }.await
     }
 }
 
@@ -84,5 +84,19 @@ impl<Err> Transaction<Err> {
             sys,
             _phantom: PhantomData,
         }
+    }
+}
+
+struct TransactionPoller<F> {
+    fut: F,
+}
+
+impl<Ret, Err, F> Future for TransactionPoller<F>
+where
+    F: Future<Output = Result<Ret, crate::Error<Err>>>,
+{
+    type Output = Result<Ret, crate::Error<Err>>;
+    fn poll(self: Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        todo!()
     }
 }
