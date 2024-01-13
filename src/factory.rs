@@ -2,12 +2,12 @@ use crate::{utils::generic_request, Database};
 use web_sys::{
     js_sys::Function,
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
-    IdbVersionChangeEvent,
+    IdbDatabase, IdbOpenDbRequest, IdbVersionChangeEvent, IdbFactory,
 };
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
 pub struct Factory {
-    sys: web_sys::IdbFactory,
+    sys: IdbFactory,
 }
 
 impl Factory {
@@ -98,7 +98,9 @@ impl Factory {
             match upgrader(evt) {
                 Ok(()) => (),
                 Err(e) => {
-                    tx.send(e);
+                    tx.send(e).expect(
+                        "IDBOpenDBRequest's on_success handler was called before on_upgrade_needed",
+                    );
                     return;
                 }
             }
@@ -117,7 +119,7 @@ impl Factory {
         let db = open_req
             .result()
             .map_err(crate::Error::from_js_value)?
-            .dyn_into::<web_sys::IdbDatabase>()
+            .dyn_into::<IdbDatabase>()
             .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
 
         Ok(Database::from_sys(db))
@@ -127,11 +129,22 @@ impl Factory {
 /// Wrapper for [`IDBVersionChangeEvent`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent)
 pub struct VersionChangeEvent {
     sys: IdbVersionChangeEvent,
+    db: Database,
 }
 
 impl VersionChangeEvent {
     fn from_sys(sys: IdbVersionChangeEvent) -> VersionChangeEvent {
-        VersionChangeEvent { sys }
+        let db_sys = sys
+            .target()
+            .expect("IDBVersionChangeEvent had no target")
+            .dyn_into::<IdbOpenDbRequest>()
+            .expect("IDBVersionChangeEvent target was not an IDBOpenDBRequest")
+            .result()
+            .expect("IDBOpenDBRequest had no result in its on_upgrade_needed handler")
+            .dyn_into::<IdbDatabase>()
+            .expect("IDBOpenDBRequest result was not an IDBDatabase");
+        let db = Database::from_sys(db_sys);
+        VersionChangeEvent { sys, db }
     }
 
     /// The version before the database upgrade, clamped to `u32::MAX`
@@ -151,7 +164,7 @@ impl VersionChangeEvent {
     }
 
     /// The database under creation
-    pub fn database(&self) -> Database {
-        todo!()
+    pub fn database(&self) -> &Database {
+        &self.db
     }
 }
