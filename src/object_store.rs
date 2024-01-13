@@ -56,18 +56,20 @@ impl<Err> ObjectStore<Err> {
     /// Clears this object store
     ///
     /// Internally, this uses [`IDBObjectStore::clear`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/clear).
-    pub async fn clear(&self) -> Result<(), crate::Error<Err>> {
-        let clear_req = self.sys.clear().map_err(|err| {
-            match error_name!(&err) {
+    pub fn clear(&self) -> impl Future<Output = Result<(), crate::Error<Err>>> {
+        match self.sys.clear() {
+            Ok(clear_req) => {
+                Either::Left(transaction_request(clear_req).map(|res| res.map(|_| ())))
+            }
+            Err(err) => Either::Right(std::future::ready(Err(match error_name!(&err) {
                 Some("ReadOnlyError") => crate::Error::ReadOnly,
                 Some("TransactionInactiveError") => {
                     panic!("Tried clearing an ObjectStore while the transaction was inactive")
                 }
                 _ => crate::Error::from_js_value(err),
             }
-            .into_user()
-        })?;
-        transaction_request(clear_req).await.map(|_| ())
+            .into_user()))),
+        }
     }
 
     /// Counts the number of objects in this store
@@ -113,6 +115,42 @@ impl<Err> ObjectStore<Err> {
             Err(e) => Either::Left(Either::Right(std::future::ready(Err(map_count_err(e))))),
         }
     }
+
+    /// Delete the object with key `key`
+    ///
+    /// Unfortunately, the IndexedDb API does not indicate whether an object was actually deleted.
+    ///
+    /// Internally, this uses [`IDBObjectStore::delete`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/delete).
+    pub fn delete(&self, key: &JsValue) -> impl Future<Output = Result<(), crate::Error<Err>>> {
+        match self.sys.delete(key) {
+            Ok(delete_req) => {
+                Either::Left(transaction_request(delete_req).map(|res| res.map(|_| ())))
+            }
+            Err(e) => Either::Right(std::future::ready(Err(map_delete_err(e)))),
+        }
+    }
+
+    /// Delete all the objects with a key in `range`
+    ///
+    /// Unfortunately, the IndexedDb API does not indicate whether an object was actually deleted.
+    ///
+    /// Internally, this uses [`IDBObjectStore::delete`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/delete).
+    pub fn delete_range(
+        &self,
+        range: impl RangeBounds<JsValue>,
+    ) -> impl Future<Output = Result<(), crate::Error<Err>>> {
+        let range = match make_key_range(range) {
+            Ok(Some(range)) => range,
+            Ok(None) => return Either::Left(Either::Left(self.clear())),
+            Err(e) => return Either::Left(Either::Right(std::future::ready(Err(e)))),
+        };
+        match self.sys.delete(&range) {
+            Ok(delete_req) => {
+                Either::Right(transaction_request(delete_req).map(|res| res.map(|_| ())))
+            }
+            Err(e) => Either::Left(Either::Right(std::future::ready(Err(map_delete_err(e))))),
+        }
+    }
 }
 
 fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
@@ -143,6 +181,19 @@ fn map_count_res(res: JsValue) -> usize {
 
 fn map_count_err<Err>(err: JsValue) -> crate::Error<Err> {
     match error_name!(&err) {
+        Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
+        Some("TransactionInactiveError") => {
+            panic!("Tried adding to an ObjectStore while the transaction was inactive")
+        }
+        Some("DataError") => crate::Error::InvalidKey,
+        _ => crate::Error::from_js_value(err),
+    }
+    .into_user()
+}
+
+fn map_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
+    match error_name!(&err) {
+        Some("ReadOnlyError") => crate::Error::ReadOnly,
         Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
         Some("TransactionInactiveError") => {
             panic!("Tried adding to an ObjectStore while the transaction was inactive")

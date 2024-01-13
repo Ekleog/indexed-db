@@ -109,6 +109,14 @@ async fn smoke_test() {
                 1
             );
 
+            // Delete
+            stuffs
+                .delete_range(Number::from(2).as_ref()..=Number::from(3).as_ref())
+                .await?;
+            assert_eq!(stuffs.count().await?, 1);
+            stuffs.delete(&Number::from(1)).await?;
+            assert_eq!(stuffs.count().await?, 0);
+
             Ok::<_, indexed_db::Error<()>>(())
         })
         .await
