@@ -2,10 +2,11 @@ use crate::{utils::generic_request, Database};
 use web_sys::{
     js_sys::Function,
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
-    IdbDatabase, IdbOpenDbRequest, IdbVersionChangeEvent, IdbFactory,
+    IdbDatabase, IdbFactory, IdbOpenDbRequest, IdbVersionChangeEvent,
 };
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
+#[derive(Debug)]
 pub struct Factory {
     sys: IdbFactory,
 }
@@ -127,6 +128,7 @@ impl Factory {
 }
 
 /// Wrapper for [`IDBVersionChangeEvent`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent)
+#[derive(Debug)]
 pub struct VersionChangeEvent {
     sys: IdbVersionChangeEvent,
     db: Database,

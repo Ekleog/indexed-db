@@ -6,6 +6,9 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 async fn smoke_test() {
+    tracing_wasm::set_as_global_default();
+    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
     // Factory::get
     let factory = Factory::get().unwrap();
 
@@ -25,5 +28,6 @@ async fn smoke_test() {
     factory.delete_database("foo").await.unwrap();
 
     // Factory::open
-    factory.open("foo", 1, |_| Ok(())).await.unwrap();
+    factory.open("foo", 2, |_| Ok(())).await.unwrap();
+    factory.open("foo", 1, |_| Ok(())).await.unwrap_err();
 }

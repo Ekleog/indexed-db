@@ -1,5 +1,6 @@
 use web_sys::IdbDatabase;
 
+#[derive(Debug)]
 pub struct Database {
     sys: IdbDatabase,
 }

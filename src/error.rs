@@ -1,4 +1,7 @@
-use web_sys::wasm_bindgen::{JsCast, JsValue};
+use web_sys::{
+    wasm_bindgen::{JsCast, JsValue},
+    DomException,
+};
 
 /// Type alias for convenience
 pub type Result<T> = std::result::Result<T, Error>;
@@ -41,6 +44,10 @@ pub enum Error<E = Void> {
     #[error("Version must not be zero")]
     VersionMustNotBeZero,
 
+    /// Requested version is older than existing version
+    #[error("Requested version is older than existing version")]
+    VersionTooOld,
+
     /// User-provided error to pass through `indexed-db` code
     #[error(transparent)]
     User(#[from] E),
@@ -56,20 +63,26 @@ impl<E: std::error::Error> From<Error<Void>> for Error<E> {
             Error::OperationNotAllowed => Error::OperationNotAllowed,
             Error::InvalidKey => Error::InvalidKey,
             Error::VersionMustNotBeZero => Error::VersionMustNotBeZero,
+            Error::VersionTooOld => Error::VersionTooOld,
         }
     }
 }
 
 impl Error {
+    pub(crate) fn from_dom_exception(err: DomException) -> Error {
+        match &err.name() as &str {
+            "NotSupportedError" => crate::Error::OperationNotSupported,
+            "NotAllowedError" => crate::Error::OperationNotAllowed,
+            "VersionError" => crate::Error::VersionTooOld,
+            _ => panic!("Unexpected error: {err:?}"),
+        }
+    }
+
     pub(crate) fn from_js_value(v: JsValue) -> Error {
         let err = v
             .dyn_into::<web_sys::DomException>()
             .expect("Trying to parse indexed_db::Error from value that is not a DomException");
-        match &err.name() as &str {
-            "NotSupportedError" => crate::Error::OperationNotSupported,
-            "NotAllowedError" => crate::Error::OperationNotAllowed,
-            _ => panic!("Unexpected error: {err:?}"),
-        }
+        Error::from_dom_exception(err)
     }
 
     pub(crate) fn from_js_event(evt: web_sys::Event) -> Error {
@@ -80,10 +93,11 @@ impl Error {
             .expect(
                 "Trying to parse indexed_db::Error from an event that is not from an IDBRequest",
             );
-        Error::from_js_value(
+        Error::from_dom_exception(
             idb_request
-                .result()
-                .expect("Failed to retrieve the error from the IDBRequest that called on_error"),
+                .error()
+                .expect("Failed to retrieve the error from the IDBRequest that called on_error")
+                .expect("IDBRequest::error did not return a DOMException"),
         )
     }
 }
