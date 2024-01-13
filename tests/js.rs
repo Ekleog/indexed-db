@@ -63,12 +63,21 @@ async fn smoke_test() {
     assert_eq!(db.object_store_names(), &["objects", "stuffs"]);
 
     // Transaction
-    db.transaction(&["stuffs"])
+    db.transaction(&["objects", "stuffs"])
         .rw()
         .run(|t| async move {
+            let objects = t.object_store("objects")?;
             let stuffs = t.object_store("stuffs")?;
+
+            // Run one simple addition
             stuffs.add(&JsString::from("foo")).await?;
-            stuffs.add(&JsString::from("bar")).await?;
+
+            // Run two additions in parallel
+            let a = stuffs.add(&JsString::from("bar"));
+            let b = objects.add_kv(&JsString::from("key"), &JsString::from("value"));
+            let (a, b) = tokio::join!(a, b);
+            a?;
+            b?;
             Ok::<_, indexed_db::Error<()>>(())
         })
         .await

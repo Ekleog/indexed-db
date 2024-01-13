@@ -1,3 +1,4 @@
+use crate::ObjectStore;
 use std::{
     cell::Cell, future::Future, marker::PhantomData, panic::AssertUnwindSafe, pin::Pin, task::Poll,
 };
@@ -6,8 +7,6 @@ use web_sys::{
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
 };
-
-use crate::ObjectStore;
 
 /// Helper to build a transaction
 pub struct TransactionBuilder {

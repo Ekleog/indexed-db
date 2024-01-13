@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+either = "1.9"
+futures-util = "0.3.30"
 pin-project-lite = "0.2.13"
 thiserror = "1.0"
 tokio = { version = "1.35", default-features = false, features = ["macros", "sync"] }

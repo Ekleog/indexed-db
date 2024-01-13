@@ -1,7 +1,7 @@
-use std::marker::PhantomData;
-use web_sys::{wasm_bindgen::JsValue, IdbObjectStore};
-
 use crate::transaction::transaction_request;
+use futures_util::future::FutureExt;
+use std::{future::Future, marker::PhantomData};
+use web_sys::{wasm_bindgen::JsValue, IdbObjectStore};
 
 /// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
 /// for use in transactions
@@ -22,9 +22,27 @@ impl<Err> ObjectStore<Err> {
     /// Add the value `val` to this object store, and return its auto-computed key
     ///
     /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
-    pub async fn add(&self, value: &JsValue) -> Result<JsValue, crate::Error<Err>> {
-        let add_req = self.sys.add(value).map_err(map_add_err)?;
-        transaction_request::<Err>(add_req).await
+    pub fn add(&self, value: &JsValue) -> impl Future<Output = Result<JsValue, crate::Error<Err>>> {
+        match self.sys.add(value) {
+            Ok(add_req) => either::Left(transaction_request::<Err>(add_req)),
+            Err(e) => either::Right(std::future::ready(Err(map_add_err(e)))),
+        }
+    }
+
+    /// Add the value `val` to this object store, with key `key`
+    ///
+    /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
+    pub fn add_kv(
+        &self,
+        key: &JsValue,
+        value: &JsValue,
+    ) -> impl Future<Output = Result<(), crate::Error<Err>>> {
+        match self.sys.add_with_key(value, key) {
+            Ok(add_req) => {
+                either::Left(transaction_request::<Err>(add_req).map(|res| res.map(|_| ())))
+            }
+            Err(e) => either::Right(std::future::ready(Err(map_add_err(e)))),
+        }
     }
 }
 
