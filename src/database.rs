@@ -66,7 +66,7 @@ impl Database {
     ///
     /// Internally, this uses [`IDBDatabase::deleteObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/deleteObjectStore).
     pub fn delete_object_store(&self, name: &str) -> crate::Result<()> {
-        self.sys.delete_object_store(name).map_err(|err| match crate::error::name(&err).as_ref().map(|s| s as &str) {
+        self.sys.delete_object_store(name).map_err(|err| match error_name!(&err) {
             Some("InvalidStateError") => crate::Error::InvalidCall,
             Some("TransactionInactiveError") => panic!("Tried to create an object store with the `versionchange` transaction having already aborted"),
             Some("NotFoundError") => crate::Error::DoesNotExist,
@@ -107,7 +107,7 @@ impl<'a> ObjectStoreBuilder<'a> {
         self.db
             .create_object_store_with_optional_parameters(self.name, &self.options)
             .map_err(
-                |err| match crate::error::name(&err).as_ref().map(|s| s as &str) {
+                |err| match error_name!(&err) {
                     Some("InvalidStateError") => crate::Error::InvalidCall,
                     Some("TransactionInactiveError") => panic!("Tried to create an object store with the `versionchange` transaction having already aborted"),
                     Some("ConstraintError") => crate::Error::AlreadyExists,

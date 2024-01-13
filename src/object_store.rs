@@ -24,7 +24,7 @@ impl<Err> ObjectStore<Err> {
     /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
     pub async fn add(&self, value: &JsValue) -> Result<JsValue, crate::Error<Err>> {
         let add_req = self.sys.add(value).map_err(|err| {
-            match crate::error::name(&err).as_ref().map(|s| s as &str) {
+            match error_name!(&err) {
                 Some("ReadOnlyError") => crate::Error::ReadOnly,
                 Some("TransactionInactiveError") => {
                     panic!("Tried adding to an ObjectStore while the transaction was inactive")

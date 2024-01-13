@@ -1,3 +1,10 @@
+// Internal helper
+macro_rules! error_name {
+    ($v:expr) => {
+        crate::error::name($v).as_ref().map(|s| s as &str)
+    };
+}
+
 mod database;
 mod error;
 mod factory;

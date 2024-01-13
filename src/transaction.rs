@@ -65,7 +65,7 @@ impl TransactionBuilder {
             .db
             .transaction_with_str_sequence_and_mode(&self.stores, self.mode)
             .map_err(|err| {
-                match crate::error::name(&err).as_ref().map(|s| s as &str) {
+                match error_name!(&err) {
                     Some("InvalidStateError") => crate::Error::DatabaseIsClosed,
                     Some("NotFoundError") => crate::Error::DoesNotExist,
                     Some("InvalidAccessError") => crate::Error::InvalidArgument,
@@ -154,7 +154,7 @@ impl<Err> Transaction<Err> {
     pub fn object_store(&self, name: &str) -> Result<ObjectStore<Err>, crate::Error<Err>> {
         Ok(ObjectStore::from_sys(self.sys.object_store(name).map_err(
             |err| {
-                match crate::error::name(&err).as_ref().map(|s| s as &str) {
+                match error_name!(&err) {
                     Some("NotFoundError") => crate::Error::DoesNotExist,
                     _ => crate::Error::from_js_value(err),
                 }

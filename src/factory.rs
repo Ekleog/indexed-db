@@ -39,12 +39,10 @@ impl Factory {
                 1 => Greater,
                 v => panic!("Unexpected result of IDBFactory::cmp: {v}"),
             })
-            .map_err(
-                |e| match crate::error::name(&e).as_ref().map(|s| s as &str) {
-                    Some("DataError") => crate::Error::InvalidKey,
-                    _ => crate::Error::from_js_value(e),
-                },
-            )
+            .map_err(|e| match error_name!(&e) {
+                Some("DataError") => crate::Error::InvalidKey,
+                _ => crate::Error::from_js_value(e),
+            })
     }
 
     // TODO: add `databases` once web-sys has it
