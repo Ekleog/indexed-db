@@ -11,8 +11,23 @@ pub enum Error {
     #[error("IndexedDB is disabled")]
     IndexedDbDisabled,
 
+    #[error("Operation is not supported by the browser")]
+    OperationNotSupported,
+
     #[error("Provided key is not valid for IndexedDB")]
     InvalidKey,
+}
+
+impl Error {
+    pub(crate) fn from_js_value(v: JsValue) -> Error {
+        let err = v
+            .dyn_into::<web_sys::DomException>()
+            .expect("Trying to parse indexed_db::Error from value that is not a DomException");
+        match &err.name() as &str {
+            "NotSupportedError" => crate::Error::OperationNotSupported,
+            _ => panic!("Unexpected error: {err:?}"),
+        }
+    }
 }
 
 pub(crate) fn name(v: &JsValue) -> Option<String> {

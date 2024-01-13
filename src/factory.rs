@@ -27,8 +27,10 @@ impl Factory {
             .map_err(
                 |e| match crate::error::name(&e).as_ref().map(|s| s as &str) {
                     Some("DataError") => crate::Error::InvalidKey,
-                    _ => panic!("Unexpected error: {e:?}"),
+                    _ => crate::Error::from_js_value(e),
                 },
             )
     }
+
+    // TODO: add `databases` once web-sys has it
 }
