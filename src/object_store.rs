@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 use web_sys::{wasm_bindgen::JsValue, IdbObjectStore};
 
+use crate::transaction::transaction_request;
+
 /// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
 /// for use in transactions
 #[derive(Debug)]
@@ -35,6 +37,6 @@ impl<'a, Err> ObjectStore<'a, Err> {
             }
             .into_user()
         })?;
-        todo!()
+        transaction_request::<Err>(add_req).await
     }
 }
