@@ -120,7 +120,17 @@ pub(crate) async fn transaction_request<Err>(
         ))
     });
 
-    todo!()
+    res.map_err(|err| crate::Error::from_js_event(err).into_user())
+        .map(|evt| {
+            evt.target()
+            .expect("Trying to parse indexed_db::Error from an event that has no target")
+            .dyn_into::<web_sys::IdbRequest>()
+            .expect(
+                "Trying to parse indexed_db::Error from an event that is not from an IDBRequest",
+            )
+            .result()
+            .expect("Failed retrieving the result of successful IDBRequest")
+        })
 }
 
 pub struct Transaction<'a, Err> {
