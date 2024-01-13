@@ -28,6 +28,7 @@ async fn smoke_test() {
     factory.delete_database("foo").await.unwrap();
 
     // Factory::open
+    factory.open("foo", 0, |_| Ok(())).await.unwrap_err();
     factory.open("foo", 2, |_| Ok(())).await.unwrap();
     factory.open("foo", 1, |_| Ok(())).await.unwrap_err();
 

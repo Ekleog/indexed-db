@@ -85,13 +85,14 @@ impl Factory {
         // the `Closure::once` bound. So, let's not do it until a reasonable use case arises.
         upgrader: impl 'static + FnOnce(VersionChangeEvent) -> crate::Result<()>,
     ) -> crate::Result<Database> {
-        let open_req =
-            self.sys.open_with_u32(name, version).map_err(|e| {
-                match crate::error::name(&e).as_ref().map(|s| s as &str) {
-                    Some("TypeError") => crate::Error::VersionMustNotBeZero,
-                    _ => crate::Error::from_js_value(e),
-                }
-            })?;
+        if version == 0 {
+            return Err(crate::Error::VersionMustNotBeZero);
+        }
+
+        let open_req = self
+            .sys
+            .open_with_u32(name, version)
+            .map_err(crate::Error::from_js_value)?;
 
         let (tx, mut rx) = tokio::sync::oneshot::channel();
         let closure = Closure::once(|evt: IdbVersionChangeEvent| {
