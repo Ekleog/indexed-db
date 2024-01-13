@@ -64,6 +64,10 @@ pub enum Error<E = Void> {
     #[error("Cannot change something that does not exists")]
     DoesNotExist,
 
+    /// Database is closed
+    #[error("Database is closed")]
+    DatabaseIsClosed,
+
     /// User-provided error to pass through `indexed-db` code
     #[error(transparent)]
     User(#[from] E),
@@ -83,6 +87,7 @@ impl<E: std::error::Error> From<Error<Void>> for Error<E> {
             Error::InvalidArgument => Error::InvalidArgument,
             Error::AlreadyExists => Error::AlreadyExists,
             Error::DoesNotExist => Error::DoesNotExist,
+            Error::DatabaseIsClosed => Error::DatabaseIsClosed,
             Error::User(e) => match e {},
         }
     }

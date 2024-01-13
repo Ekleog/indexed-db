@@ -79,7 +79,7 @@ impl Database {
     /// This will open the object stores identified by `stores`. See the methods of [`TransactionBuilder`]
     /// for more details about how transactions actually happen.
     pub fn transaction(&self, stores: &[&str]) -> TransactionBuilder {
-        TransactionBuilder::from_names(stores)
+        TransactionBuilder::from_names(self.sys.clone(), stores)
     }
 
     /// Closes this database connection

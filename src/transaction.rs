@@ -2,23 +2,25 @@ use std::future::Future;
 use web_sys::{
     js_sys::{Array, JsString},
     wasm_bindgen::JsValue,
-    IdbTransactionMode,
+    IdbDatabase, IdbTransaction, IdbTransactionMode,
 };
 
 /// Helper to build a transaction
 pub struct TransactionBuilder {
+    db: IdbDatabase,
     stores: JsValue,
     mode: IdbTransactionMode,
     // TODO: add support for transaction durability when web-sys gets it
 }
 
 impl TransactionBuilder {
-    pub(crate) fn from_names(names: &[&str]) -> TransactionBuilder {
+    pub(crate) fn from_names(db: IdbDatabase, names: &[&str]) -> TransactionBuilder {
         let stores = Array::new();
         for s in names {
             stores.push(&JsString::from(*s));
         }
         TransactionBuilder {
+            db,
             stores: stores.into(),
             mode: IdbTransactionMode::Readonly,
         }
@@ -50,10 +52,28 @@ impl TransactionBuilder {
         Fun: FnOnce(Transaction) -> RetFut,
         RetFut: Future<Output = Ret>,
     {
+        let t = Transaction::from_sys(
+            self.db
+                .transaction_with_str_sequence_and_mode(&self.stores, self.mode)
+                .map_err(
+                    |err| match crate::error::name(&err).as_ref().map(|s| s as &str) {
+                        Some("InvalidStateError") => crate::Error::DatabaseIsClosed,
+                        Some("NotFoundError") => crate::Error::DoesNotExist,
+                        Some("InvalidAccessError") => crate::Error::InvalidArgument,
+                        _ => crate::Error::from_js_value(err),
+                    },
+                )?,
+        );
         todo!()
     }
 }
 
 pub struct Transaction {
-    // todo
+    sys: IdbTransaction,
+}
+
+impl Transaction {
+    fn from_sys(sys: IdbTransaction) -> Transaction {
+        Transaction { sys }
+    }
 }
