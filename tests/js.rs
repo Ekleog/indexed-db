@@ -1,6 +1,9 @@
 use indexed_db::{Error, Factory};
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
-use web_sys::{js_sys::JsString, wasm_bindgen::JsValue};
+use web_sys::{
+    js_sys::{JsString, Number},
+    wasm_bindgen::JsValue,
+};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -81,6 +84,7 @@ async fn smoke_test() {
             b?;
             assert_eq!(stuffs.count().await?, 2);
             assert_eq!(objects.count().await?, 1);
+            assert!(objects.contains(&JsString::from("key")).await?);
 
             Ok::<_, indexed_db::Error<()>>(())
         })
@@ -90,10 +94,19 @@ async fn smoke_test() {
         .rw()
         .run(|t| async move {
             let objects = t.object_store("objects")?;
+            let stuffs = t.object_store("stuffs")?;
 
             // Clear objects
             objects.clear().await?;
             assert_eq!(objects.count().await?, 0);
+
+            // Count range
+            assert_eq!(
+                stuffs
+                    .count_in_range(Number::from(2).as_ref()..=Number::from(3).as_ref())
+                    .await?,
+                1
+            );
 
             Ok::<_, indexed_db::Error<()>>(())
         })

@@ -1,10 +1,14 @@
 use crate::transaction::transaction_request;
 use futures_util::future::{Either, FutureExt};
-use std::{future::Future, marker::PhantomData};
+use std::{
+    future::Future,
+    marker::PhantomData,
+    ops::{Bound, RangeBounds},
+};
 use web_sys::{
     js_sys::Number,
     wasm_bindgen::{JsCast, JsValue},
-    IdbObjectStore,
+    IdbKeyRange, IdbObjectStore,
 };
 
 /// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
@@ -77,6 +81,62 @@ impl<Err> ObjectStore<Err> {
             Err(e) => Either::Right(std::future::ready(Err(map_count_err(e)))),
         }
     }
+
+    /// Checks whether the provided key exists in this object store
+    ///
+    /// Internally, this uses [`IDBObjectStore::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/count).
+    pub fn contains(&self, key: &JsValue) -> impl Future<Output = Result<bool, crate::Error<Err>>> {
+        match self.sys.count_with_key(key) {
+            Ok(count_req) => Either::Left(
+                transaction_request(count_req).map(|res| res.map(map_count_res).map(|n| n != 0)),
+            ),
+            Err(e) => Either::Right(std::future::ready(Err(map_count_err(e)))),
+        }
+    }
+
+    /// Counts the number of objects with a key in `range`
+    ///
+    /// Internally, this uses [`IDBObjectStore::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/count).
+    pub fn count_in_range(
+        &self,
+        range: impl RangeBounds<JsValue>,
+    ) -> impl Future<Output = Result<usize, crate::Error<Err>>> {
+        let range = match (range.start_bound(), range.end_bound()) {
+            (Bound::Unbounded, Bound::Unbounded) => {
+                return Either::Left(Either::Left(self.count()))
+            }
+            (Bound::Unbounded, Bound::Included(b)) => IdbKeyRange::upper_bound_with_open(b, false),
+            (Bound::Unbounded, Bound::Excluded(b)) => IdbKeyRange::upper_bound_with_open(b, true),
+            (Bound::Included(b), Bound::Unbounded) => IdbKeyRange::lower_bound_with_open(b, false),
+            (Bound::Excluded(b), Bound::Unbounded) => IdbKeyRange::lower_bound_with_open(b, true),
+            (Bound::Included(l), Bound::Included(u)) => {
+                IdbKeyRange::bound_with_lower_open_and_upper_open(l, u, false, false)
+            }
+            (Bound::Included(l), Bound::Excluded(u)) => {
+                IdbKeyRange::bound_with_lower_open_and_upper_open(l, u, false, true)
+            }
+            (Bound::Excluded(l), Bound::Included(u)) => {
+                IdbKeyRange::bound_with_lower_open_and_upper_open(l, u, true, false)
+            }
+            (Bound::Excluded(l), Bound::Excluded(u)) => {
+                IdbKeyRange::bound_with_lower_open_and_upper_open(l, u, true, true)
+            }
+        };
+        let range = match range {
+            Ok(range) => range,
+            Err(err) => {
+                return Either::Left(Either::Right(std::future::ready(Err(map_key_range_err(
+                    err,
+                )))))
+            }
+        };
+        Either::Right(match self.sys.count_with_key(&range) {
+            Ok(count_req) => {
+                Either::Left(transaction_request(count_req).map(|res| res.map(map_count_res)))
+            }
+            Err(e) => Either::Right(std::future::ready(Err(map_count_err(e)))),
+        })
+    }
 }
 
 fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
@@ -111,6 +171,14 @@ fn map_count_err<Err>(err: JsValue) -> crate::Error<Err> {
         Some("TransactionInactiveError") => {
             panic!("Tried adding to an ObjectStore while the transaction was inactive")
         }
+        Some("DataError") => crate::Error::InvalidKey,
+        _ => crate::Error::from_js_value(err),
+    }
+    .into_user()
+}
+
+fn map_key_range_err<Err>(err: JsValue) -> crate::Error<Err> {
+    match error_name!(&err) {
         Some("DataError") => crate::Error::InvalidKey,
         _ => crate::Error::from_js_value(err),
     }

@@ -8,7 +8,21 @@ futures-channel = "0.3.30"
 futures-util = "0.3.30"
 pin-project-lite = "0.2.13"
 thiserror = "1.0"
-web-sys = { version = "0.3.66", features = ["DomException", "DomStringList", "Event", "IdbDatabase", "IdbFactory", "IdbObjectStore", "IdbObjectStoreParameters", "IdbOpenDbRequest", "IdbTransaction", "IdbTransactionMode", "IdbVersionChangeEvent", "Window"] }
+web-sys = { version = "0.3.66", features = [
+    "DomException",
+    "DomStringList",
+    "Event",
+    "IdbDatabase",
+    "IdbFactory",
+    "IdbKeyRange",
+    "IdbObjectStore",
+    "IdbObjectStoreParameters",
+    "IdbOpenDbRequest",
+    "IdbTransaction",
+    "IdbTransactionMode",
+    "IdbVersionChangeEvent",
+    "Window",
+] }
 
 [dev-dependencies]
 console_error_panic_hook = "0.1.7"
