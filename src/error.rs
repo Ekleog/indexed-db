@@ -48,6 +48,18 @@ pub enum Error<E = Void> {
     #[error("Requested version is older than existing version")]
     VersionTooOld,
 
+    /// The requested function cannot be called from this context
+    #[error("The requested function cannot be called from this context")]
+    InvalidCall,
+
+    /// The provided arguments are invalid
+    #[error("The provided arguments are invalid")]
+    InvalidArgument,
+
+    /// Cannot create something that already exists
+    #[error("Cannot create something that already exists")]
+    AlreadyExists,
+
     /// User-provided error to pass through `indexed-db` code
     #[error(transparent)]
     User(#[from] E),
@@ -56,7 +68,6 @@ pub enum Error<E = Void> {
 impl<E: std::error::Error> From<Error<Void>> for Error<E> {
     fn from(o: Error<Void>) -> Error<E> {
         match o {
-            Error::User(e) => match e {},
             Error::NotInBrowser => Error::NotInBrowser,
             Error::IndexedDbDisabled => Error::IndexedDbDisabled,
             Error::OperationNotSupported => Error::OperationNotSupported,
@@ -64,6 +75,10 @@ impl<E: std::error::Error> From<Error<Void>> for Error<E> {
             Error::InvalidKey => Error::InvalidKey,
             Error::VersionMustNotBeZero => Error::VersionMustNotBeZero,
             Error::VersionTooOld => Error::VersionTooOld,
+            Error::InvalidCall => Error::InvalidCall,
+            Error::InvalidArgument => Error::InvalidArgument,
+            Error::AlreadyExists => Error::AlreadyExists,
+            Error::User(e) => match e {},
         }
     }
 }

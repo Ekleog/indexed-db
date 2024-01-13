@@ -30,4 +30,18 @@ async fn smoke_test() {
     // Factory::open
     factory.open("foo", 2, |_| Ok(())).await.unwrap();
     factory.open("foo", 1, |_| Ok(())).await.unwrap_err();
+
+    // Database::build_object_store
+    factory
+        .open("bar", 1, |evt| {
+            let db = evt.database();
+            db.build_object_store("objects").create()?;
+            db.build_object_store("things")
+                .key_path(&["foo", "bar"])
+                .create()?;
+            db.build_object_store("stuffs").auto_increment().create()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
