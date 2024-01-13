@@ -1,4 +1,4 @@
-use crate::ObjectStore;
+use crate::{ObjectStore, TransactionBuilder};
 use web_sys::{
     js_sys::{Array, JsString},
     IdbDatabase, IdbObjectStoreParameters,
@@ -41,6 +41,14 @@ impl Database {
             Some("NotFoundError") => crate::Error::DoesNotExist,
             _ => crate::Error::from_js_value(err),
         })
+    }
+
+    /// Run a transaction
+    ///
+    /// This will open the object stores identified by `stores`. See the methods of [`TransactionBuilder`]
+    /// for more details about how transactions actually happen.
+    pub fn transaction(&self, stores: &[&str]) -> TransactionBuilder {
+        TransactionBuilder::from_names(stores)
     }
 
     /// Closes this database connection
