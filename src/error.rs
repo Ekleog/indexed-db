@@ -7,8 +7,6 @@ use web_sys::{
 pub type Result<T> = std::result::Result<T, Error>;
 
 // TODO: replace with ! once Rust 2024 lands
-// At this point we'll probably also be able to remove the `: std::error::Error` bounds everywhere,
-// and hopefully the `impl From for Error` too
 #[doc(hidden)]
 #[derive(Debug)]
 pub enum Void {}
@@ -71,26 +69,6 @@ pub enum Error<E = Void> {
     /// User-provided error to pass through `indexed-db` code
     #[error(transparent)]
     User(#[from] E),
-}
-
-impl<E: std::error::Error> From<Error<Void>> for Error<E> {
-    fn from(o: Error<Void>) -> Error<E> {
-        match o {
-            Error::NotInBrowser => Error::NotInBrowser,
-            Error::IndexedDbDisabled => Error::IndexedDbDisabled,
-            Error::OperationNotSupported => Error::OperationNotSupported,
-            Error::OperationNotAllowed => Error::OperationNotAllowed,
-            Error::InvalidKey => Error::InvalidKey,
-            Error::VersionMustNotBeZero => Error::VersionMustNotBeZero,
-            Error::VersionTooOld => Error::VersionTooOld,
-            Error::InvalidCall => Error::InvalidCall,
-            Error::InvalidArgument => Error::InvalidArgument,
-            Error::AlreadyExists => Error::AlreadyExists,
-            Error::DoesNotExist => Error::DoesNotExist,
-            Error::DatabaseIsClosed => Error::DatabaseIsClosed,
-            Error::User(e) => match e {},
-        }
-    }
 }
 
 impl Error {
