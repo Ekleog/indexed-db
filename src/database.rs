@@ -168,6 +168,22 @@ impl ObjectStoreConfigurator {
             options: IdbIndexParameters::new(),
         }
     }
+
+    /// Delete an index from this object store
+    ///
+    /// Note that this method can only be called from within an `on_upgrade_needed` callback. It returns
+    /// a builder, and calling the `create` method on this builder will perform the actual creation.
+    ///
+    /// Internally, this uses [`IDBObjectStore::deleteIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/deleteIndex).
+    pub fn delete_index(&self, name: &str) -> crate::Result<()> {
+        self.sys
+            .delete_index(name)
+            .map_err(|err| match error_name!(&err) {
+                Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
+                Some("NotFoundError") => crate::Error::DoesNotExist,
+                _ => crate::Error::from_js_value(err),
+            })
+    }
 }
 
 pub struct IndexBuilder<'a> {
