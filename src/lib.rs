@@ -9,4 +9,4 @@ pub use database::{Database, ObjectStoreBuilder};
 pub use error::{Error, Result};
 pub use factory::{Factory, VersionChangeEvent};
 pub use object_store::ObjectStore;
-pub use transaction::TransactionBuilder;
+pub use transaction::{Transaction, TransactionBuilder};
