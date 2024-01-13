@@ -17,4 +17,5 @@ async fn smoke_test() {
         factory.cmp(&JsValue::TRUE, &JsValue::FALSE),
         Err(Error::InvalidKey),
     ));
+    factory.delete_database("foo").await.unwrap();
 }
