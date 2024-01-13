@@ -1,6 +1,6 @@
 use indexed_db::{Error, Factory};
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
-use web_sys::wasm_bindgen::JsValue;
+use web_sys::{js_sys::JsString, wasm_bindgen::JsValue};
 
 wasm_bindgen_test_configure!(run_in_browser);
 
@@ -52,12 +52,24 @@ async fn smoke_test() {
     let db = factory
         .open("bar", 2, |evt| {
             let db = evt.database();
-            db.delete_object_store("stuffs")?;
+            db.delete_object_store("things")?;
             Ok(())
         })
         .await
         .unwrap();
     assert_eq!(db.name(), "bar");
     assert_eq!(db.version(), 2);
-    assert_eq!(db.object_store_names(), &["objects", "things"]);
+    assert_eq!(db.object_store_names(), &["objects", "stuffs"]);
+
+    // Transaction
+    db.transaction(&["stuffs"])
+        .rw()
+        .run(|t| async move {
+            let stuffs = t.object_store("stuffs")?;
+            stuffs.add(&JsString::from("foo")).await?;
+            stuffs.add(&JsString::from("bar")).await?;
+            Ok::<_, indexed_db::Error<()>>(())
+        })
+        .await
+        .unwrap();
 }

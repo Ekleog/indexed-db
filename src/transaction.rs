@@ -58,7 +58,7 @@ impl TransactionBuilder {
         transaction: Fun,
     ) -> Result<Ret, crate::Error<Err>>
     where
-        Fun: for<'a> FnOnce(Transaction<'a, Err>) -> RetFut,
+        Fun: FnOnce(Transaction<Err>) -> RetFut,
         RetFut: Future<Output = Result<Ret, crate::Error<Err>>>,
     {
         let t = self
@@ -103,7 +103,8 @@ pub(crate) async fn transaction_request<Err>(
         p.set(Some(
             p.get()
                 .expect("Called transaction methods outside of a transaction")
-                - 1,
+                .checked_add(1)
+                .expect("More than usize::MAX requests ongoing"),
         ))
     });
 
@@ -116,7 +117,8 @@ pub(crate) async fn transaction_request<Err>(
         p.set(Some(
             p.get()
                 .expect("Called transaction methods outside of a transaction")
-                - 1,
+                .checked_sub(1)
+                .expect("Something went wrong with the pending requests accounting"),
         ))
     });
 
@@ -133,13 +135,13 @@ pub(crate) async fn transaction_request<Err>(
         })
 }
 
-pub struct Transaction<'a, Err> {
+pub struct Transaction<Err> {
     sys: IdbTransaction,
-    _phantom: PhantomData<&'a mut Err>,
+    _phantom: PhantomData<Err>,
 }
 
-impl<'a, Err> Transaction<'a, Err> {
-    fn from_sys(sys: IdbTransaction) -> Transaction<'a, Err> {
+impl<Err> Transaction<Err> {
+    fn from_sys(sys: IdbTransaction) -> Transaction<Err> {
         Transaction {
             sys,
             _phantom: PhantomData,
