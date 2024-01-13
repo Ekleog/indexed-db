@@ -1,4 +1,6 @@
-use std::{future::Future, marker::PhantomData, pin::Pin, task::Poll};
+use std::{
+    cell::Cell, future::Future, marker::PhantomData, panic::AssertUnwindSafe, pin::Pin, task::Poll,
+};
 use web_sys::{
     js_sys::{Array, JsString},
     wasm_bindgen::JsValue,
@@ -46,6 +48,8 @@ impl TransactionBuilder {
     /// If `transaction` returns an `Ok` value, then the transaction will be committed. If it
     /// returns an `Err` value, then it will be aborted.
     ///
+    /// Note that transactions cannot be nested.
+    ///
     /// Internally, this uses [`IDBDatabase::transaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/transaction).
     pub async fn run<Fun, RetFut, Ret, Err>(
         self,
@@ -55,21 +59,25 @@ impl TransactionBuilder {
         Fun: FnOnce(Transaction<Err>) -> RetFut,
         RetFut: Future<Output = Result<Ret, crate::Error<Err>>>,
     {
-        let t = Transaction::from_sys(
-            self.db
-                .transaction_with_str_sequence_and_mode(&self.stores, self.mode)
-                .map_err(|err| {
-                    match crate::error::name(&err).as_ref().map(|s| s as &str) {
-                        Some("InvalidStateError") => crate::Error::DatabaseIsClosed,
-                        Some("NotFoundError") => crate::Error::DoesNotExist,
-                        Some("InvalidAccessError") => crate::Error::InvalidArgument,
-                        _ => crate::Error::from_js_value(err),
-                    }
-                    .into_user()
-                })?,
-        );
-        let fut = transaction(t);
-        TransactionPoller { fut }.await
+        let t = self
+            .db
+            .transaction_with_str_sequence_and_mode(&self.stores, self.mode)
+            .map_err(|err| {
+                match crate::error::name(&err).as_ref().map(|s| s as &str) {
+                    Some("InvalidStateError") => crate::Error::DatabaseIsClosed,
+                    Some("NotFoundError") => crate::Error::DoesNotExist,
+                    Some("InvalidAccessError") => crate::Error::InvalidArgument,
+                    _ => crate::Error::from_js_value(err),
+                }
+                .into_user()
+            })?;
+        let fut = transaction(Transaction::from_sys(t.clone()));
+        TransactionPoller {
+            fut,
+            transaction: t,
+            pending_requests: 0,
+        }
+        .await
     }
 }
 
@@ -87,8 +95,17 @@ impl<Err> Transaction<Err> {
     }
 }
 
-struct TransactionPoller<F> {
-    fut: F,
+thread_local! {
+    static PENDING_REQUESTS: Cell<Option<usize>> = Cell::new(None);
+}
+
+pin_project_lite::pin_project! {
+    struct TransactionPoller<F> {
+        #[pin]
+        fut: F,
+        transaction: IdbTransaction,
+        pending_requests: usize,
+    }
 }
 
 impl<Ret, Err, F> Future for TransactionPoller<F>
@@ -96,7 +113,42 @@ where
     F: Future<Output = Result<Ret, crate::Error<Err>>>,
 {
     type Output = Result<Ret, crate::Error<Err>>;
-    fn poll(self: Pin<&mut Self>, _cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
-        todo!()
+    fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        if PENDING_REQUESTS
+            .with(|p| p.replace(Some(*this.pending_requests)))
+            .is_some()
+        {
+            this.transaction
+                .abort()
+                .expect("Failed aborting transaction upon developer error");
+            panic!("Tried to nest transactions");
+        }
+        let res = match std::panic::catch_unwind(AssertUnwindSafe(|| this.fut.poll(cx))) {
+            Ok(res) => res,
+            Err(e) => {
+                this.transaction
+                    .abort()
+                    .expect("Failed aborting transaction upon panic");
+                std::panic::resume_unwind(e);
+            }
+        };
+        let pending = match PENDING_REQUESTS.with(|p| p.take()) {
+            Some(p) => p,
+            None => {
+                this.transaction
+                    .abort()
+                    .expect("Failed aborting transaction upon developer error");
+                panic!("Tried to nest transactions");
+            }
+        };
+        if pending == 0 {
+            this.transaction
+                .abort()
+                .expect("Failed aborting transaction upon developer error");
+            panic!("Transaction blocked without any request under way");
+        }
+        *this.pending_requests = pending;
+        res
     }
 }

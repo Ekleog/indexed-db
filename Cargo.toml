@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+pin-project-lite = "0.2.13"
 thiserror = "1.0"
 tokio = { version = "1.35", default-features = false, features = ["sync"] }
 web-sys = { version = "0.3.66", features = ["DomException", "DomStringList", "Event", "IdbDatabase", "IdbFactory", "IdbObjectStore", "IdbObjectStoreParameters", "IdbOpenDbRequest", "IdbTransaction", "IdbTransactionMode", "IdbVersionChangeEvent", "Window"] }
