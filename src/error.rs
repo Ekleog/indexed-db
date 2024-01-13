@@ -5,4 +5,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("Not running in a browser window")]
     NotInBrowser,
+
+    #[error("IndexedDB is disabled")]
+    IndexedDbDisabled,
 }
