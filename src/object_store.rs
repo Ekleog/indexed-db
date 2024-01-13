@@ -44,6 +44,23 @@ impl<Err> ObjectStore<Err> {
             Err(e) => Either::Right(std::future::ready(Err(map_add_err(e)))),
         }
     }
+
+    /// Clears this object store
+    ///
+    /// Internally, this uses [`IDBObjectStore::clear`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/clear).
+    pub async fn clear(&self) -> Result<(), crate::Error<Err>> {
+        let clear_req = self.sys.clear().map_err(|err| {
+            match error_name!(&err) {
+                Some("ReadOnlyError") => crate::Error::ReadOnly,
+                Some("TransactionInactiveError") => {
+                    panic!("Tried clearing an ObjectStore while the transaction was inactive")
+                }
+                _ => crate::Error::from_js_value(err),
+            }
+            .into_user()
+        })?;
+        transaction_request(clear_req).await.map(|_| ())
+    }
 }
 
 fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
