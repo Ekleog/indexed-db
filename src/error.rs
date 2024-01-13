@@ -14,6 +14,9 @@ pub enum Error {
     #[error("Operation is not supported by the browser")]
     OperationNotSupported,
 
+    #[error("Operation is not allowed by the user agent")]
+    OperationNotAllowed,
+
     #[error("Provided key is not valid for IndexedDB")]
     InvalidKey,
 }
@@ -25,6 +28,7 @@ impl Error {
             .expect("Trying to parse indexed_db::Error from value that is not a DomException");
         match &err.name() as &str {
             "NotSupportedError" => crate::Error::OperationNotSupported,
+            "NotAllowedError" => crate::Error::OperationNotAllowed,
             _ => panic!("Unexpected error: {err:?}"),
         }
     }
