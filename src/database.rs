@@ -1,7 +1,7 @@
-use crate::{ObjectStore, TransactionBuilder};
+use crate::TransactionBuilder;
 use web_sys::{
     js_sys::{Array, JsString},
-    IdbDatabase, IdbObjectStoreParameters,
+    IdbDatabase, IdbObjectStore, IdbObjectStoreParameters,
 };
 
 /// Wrapper for [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)
@@ -103,7 +103,7 @@ impl<'a> ObjectStoreBuilder<'a> {
     /// Create the object store
     ///
     /// Internally, this uses [`IDBDatabase::createObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore).
-    pub fn create(self) -> crate::Result<ObjectStore> {
+    pub fn create(self) -> crate::Result<ObjectStoreConfigurator> {
         self.db
             .create_object_store_with_optional_parameters(self.name, &self.options)
             .map_err(
@@ -115,7 +115,7 @@ impl<'a> ObjectStoreBuilder<'a> {
                     _ => crate::Error::from_js_value(err),
                 },
             )
-            .map(ObjectStore::from_sys)
+            .map(ObjectStoreConfigurator::from_sys)
     }
 
     /// Set the key path for out-of-line keys
@@ -137,4 +137,18 @@ impl<'a> ObjectStoreBuilder<'a> {
         self.options.auto_increment(true);
         self
     }
+}
+
+/// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
+/// specialized for configuring object stores
+pub struct ObjectStoreConfigurator {
+    sys: IdbObjectStore,
+}
+
+impl ObjectStoreConfigurator {
+    pub(crate) fn from_sys(sys: IdbObjectStore) -> ObjectStoreConfigurator {
+        ObjectStoreConfigurator { sys }
+    }
+
+    // TODO: actually implement the index methods, etc.
 }

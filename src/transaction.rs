@@ -7,6 +7,8 @@ use web_sys::{
     IdbDatabase, IdbTransaction, IdbTransactionMode,
 };
 
+use crate::ObjectStore;
+
 /// Helper to build a transaction
 pub struct TransactionBuilder {
     db: IdbDatabase,
@@ -81,6 +83,10 @@ impl TransactionBuilder {
     }
 }
 
+thread_local! {
+    static PENDING_REQUESTS: Cell<Option<usize>> = Cell::new(None);
+}
+
 pub struct Transaction<Err> {
     sys: IdbTransaction,
     _phantom: PhantomData<Err>,
@@ -93,10 +99,21 @@ impl<Err> Transaction<Err> {
             _phantom: PhantomData,
         }
     }
-}
 
-thread_local! {
-    static PENDING_REQUESTS: Cell<Option<usize>> = Cell::new(None);
+    /// Returns an [`ObjectStore`] that can be used to operate on data in this transaction
+    ///
+    /// Internally, this uses [`IDBTransaction::object_store`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction/objectStore).
+    pub fn object_store(&self, name: &str) -> Result<ObjectStore<Err>, crate::Error<Err>> {
+        Ok(ObjectStore::from_sys(self.sys.object_store(name).map_err(
+            |err| {
+                match crate::error::name(&err).as_ref().map(|s| s as &str) {
+                    Some("NotFoundError") => crate::Error::DoesNotExist,
+                    _ => crate::Error::from_js_value(err),
+                }
+                .into_user()
+            },
+        )?))
+    }
 }
 
 pin_project_lite::pin_project! {
