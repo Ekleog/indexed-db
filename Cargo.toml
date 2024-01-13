@@ -5,7 +5,8 @@ edition = "2021"
 
 [dependencies]
 thiserror = "1.0"
-web-sys = { version = "0.3.66", features = ["DomException", "IdbFactory", "Window"] }
+tokio = { version = "1.35", default-features = false, features = ["sync"] }
+web-sys = { version = "0.3.66", features = ["DomException", "IdbFactory", "IdbOpenDbRequest", "Window"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.39"

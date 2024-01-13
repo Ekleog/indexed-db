@@ -1,5 +1,7 @@
 use web_sys::wasm_bindgen::JsValue;
 
+use crate::utils::generic_request;
+
 pub struct Factory {
     sys: web_sys::IdbFactory,
 }
@@ -33,4 +35,16 @@ impl Factory {
     }
 
     // TODO: add `databases` once web-sys has it
+
+    pub async fn delete_database(&self, name: &str) -> crate::Result<()> {
+        generic_request(
+            self.sys
+                .delete_database(name)
+                .map_err(crate::Error::from_js_value)?
+                .into(),
+        )
+        .await
+        .map(|_| ())
+        .map_err(crate::Error::from_js_value)
+    }
 }
