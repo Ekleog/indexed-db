@@ -1,7 +1,7 @@
 use crate::TransactionBuilder;
 use web_sys::{
     js_sys::{Array, JsString},
-    IdbDatabase, IdbObjectStore, IdbObjectStoreParameters,
+    IdbDatabase, IdbIndexParameters, IdbObjectStore, IdbObjectStoreParameters,
 };
 
 /// Wrapper for [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)
@@ -150,5 +150,67 @@ impl ObjectStoreConfigurator {
         ObjectStoreConfigurator { sys }
     }
 
-    // TODO: actually implement the index methods, etc.
+    /// Build an index over this object store
+    ///
+    /// Note that this method can only be called from within an `on_upgrade_needed` callback. It returns
+    /// a builder, and calling the `create` method on this builder will perform the actual creation.
+    ///
+    /// Internally, this uses [`IDBObjectStore::createIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex).
+    pub fn build_index<'a>(&self, name: &'a str, key_path: &[&str]) -> IndexBuilder<'a> {
+        let key = Array::new();
+        for p in key_path {
+            key.push(&JsString::from(*p));
+        }
+        IndexBuilder {
+            store: self.sys.clone(),
+            name,
+            key_path: key,
+            options: IdbIndexParameters::new(),
+        }
+    }
+}
+
+pub struct IndexBuilder<'a> {
+    store: IdbObjectStore,
+    name: &'a str,
+    key_path: Array,
+    options: IdbIndexParameters,
+}
+
+impl<'a> IndexBuilder<'a> {
+    /// Create the index
+    ///
+    /// Internally, this uses [`IDBObjectStore::createIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex).
+    pub fn create(self) -> crate::Result<()> {
+        self.store
+            .create_index_with_str_sequence_and_optional_parameters(
+                self.name,
+                &self.key_path,
+                &self.options,
+            )
+            .map_err(|err| match error_name!(&err) {
+                Some("ConstraintError") => crate::Error::AlreadyExists,
+                Some("InvalidAccessError") => crate::Error::InvalidArgument,
+                Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
+                Some("SyntaxError") => crate::Error::InvalidKey,
+                _ => crate::Error::from_js_value(err),
+            })
+            .map(|_| ())
+    }
+
+    /// Mark this index as unique
+    ///
+    /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex#unique).
+    pub fn unique(mut self) -> Self {
+        self.options.unique(true);
+        self
+    }
+
+    /// Mark this index as multi-entry
+    ///
+    /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex#multientry).
+    pub fn multi_entry(mut self) -> Self {
+        self.options.multi_entry(true);
+        self
+    }
 }

@@ -14,6 +14,8 @@ web-sys = { version = "0.3.66", features = [
     "Event",
     "IdbDatabase",
     "IdbFactory",
+    "IdbIndex",
+    "IdbIndexParameters",
     "IdbKeyRange",
     "IdbObjectStore",
     "IdbObjectStoreParameters",

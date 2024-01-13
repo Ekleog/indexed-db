@@ -43,7 +43,8 @@ async fn smoke_test() {
             db.build_object_store("things")
                 .key_path(&["foo", "bar"])
                 .create()?;
-            db.build_object_store("stuffs").auto_increment().create()?;
+            let stuffs = db.build_object_store("stuffs").auto_increment().create()?;
+            stuffs.build_index("contents", &[""]).create()?;
             Ok(())
         })
         .await
