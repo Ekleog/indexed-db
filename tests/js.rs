@@ -188,3 +188,49 @@ async fn smoke_test() {
         .await
         .unwrap();
 }
+
+#[wasm_bindgen_test]
+async fn auto_rollback() {
+    let factory = Factory::get().unwrap();
+
+    let db = factory
+        .open("baz", 1, |evt| {
+            let db = evt.database();
+            db.build_object_store("data").auto_increment().create()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    db.transaction(&["data"])
+        .rw()
+        .run(|t| async move {
+            t.object_store("data")?.add(&JsString::from("foo")).await?;
+            t.object_store("data")?.add(&JsString::from("bar")).await?;
+            if true {
+                // Something went wrong!
+                Err::<(), _>(())?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap_err();
+
+    db.transaction(&["data"])
+        .rw()
+        .run(|t| async move {
+            t.object_store("data")?.add(&JsString::from("baz")).await?;
+            Ok::<_, indexed_db::Error<()>>(())
+        })
+        .await
+        .unwrap();
+
+    db.transaction(&["data"])
+        .rw()
+        .run(|t| async move {
+            assert_eq!(t.object_store("data")?.count().await?, 1);
+            Ok::<_, indexed_db::Error<()>>(())
+        })
+        .await
+        .unwrap();
+}
