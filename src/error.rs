@@ -10,6 +10,11 @@ pub type Result<T> = std::result::Result<T, Error>;
 ///
 /// The `E` generic argument is used for when user-defined error types should
 /// be allowed, eg. when the user provides a callback.
+///
+/// Please do not rely on the fact that the default value is `void::Void`, as
+/// this will change in the future (to switch to `!`) without considering it
+/// as a semver breakage. If you need to refer to `Error<void::Void>`, then
+/// just refer to it as `Error`.
 // TODO: replace void::Void with `!` once `never_type` is stable
 #[derive(Clone, Debug, thiserror::Error)]
 #[non_exhaustive]
