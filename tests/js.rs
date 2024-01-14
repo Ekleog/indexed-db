@@ -157,4 +157,34 @@ async fn smoke_test() {
         })
         .await
         .unwrap();
+    db.transaction(&["stuffs"])
+        .rw()
+        .run(|t| async move {
+            let stuffs = t.object_store("stuffs")?;
+
+            // Index
+            stuffs.add(&JsString::from("value3")).await?;
+            stuffs.put(&JsString::from("value2")).await?;
+            stuffs.add(&JsString::from("value1")).await?;
+            assert_eq!(
+                stuffs.get_all(None).await?,
+                vec![
+                    (**JsString::from("value3")).clone(),
+                    (**JsString::from("value2")).clone(),
+                    (**JsString::from("value1")).clone()
+                ]
+            );
+            assert_eq!(
+                stuffs.index("contents").unwrap().get_all(None).await?,
+                vec![
+                    (**JsString::from("value1")).clone(),
+                    (**JsString::from("value2")).clone(),
+                    (**JsString::from("value3")).clone()
+                ]
+            );
+
+            Ok::<_, indexed_db::Error<()>>(())
+        })
+        .await
+        .unwrap();
 }
