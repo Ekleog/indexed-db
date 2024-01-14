@@ -11,7 +11,7 @@ async fn other_awaits_panic() {
     let factory = Factory::<anyhow::Error>::get().unwrap();
 
     let db = factory
-        .open("baz", 1, |evt| {
+        .open("baz", 1, |evt| async move {
             let db = evt.database();
             db.build_object_store("data").auto_increment().create()?;
             Ok(())

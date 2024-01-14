@@ -31,13 +31,22 @@ async fn smoke_test() {
     factory.delete_database("foo").await.unwrap();
 
     // Factory::open
-    factory.open("foo", 0, |_| Ok(())).await.unwrap_err();
-    factory.open("foo", 2, |_| Ok(())).await.unwrap();
-    factory.open("foo", 1, |_| Ok(())).await.unwrap_err();
+    factory
+        .open("foo", 0, |_| async move { Ok(()) })
+        .await
+        .unwrap_err();
+    factory
+        .open("foo", 2, |_| async move { Ok(()) })
+        .await
+        .unwrap();
+    factory
+        .open("foo", 1, |_| async move { Ok(()) })
+        .await
+        .unwrap_err();
 
     // Database::build_object_store
     let db = factory
-        .open("bar", 1, |evt| {
+        .open("bar", 1, |evt| async move {
             let db = evt.database();
             db.build_object_store("objects").create()?;
             db.build_object_store("things")
@@ -55,7 +64,7 @@ async fn smoke_test() {
     db.close();
 
     let db = factory
-        .open("bar", 2, |evt| {
+        .open("bar", 2, |evt| async move {
             let db = evt.database();
             db.delete_object_store("things")?;
             Ok(())
@@ -194,7 +203,7 @@ async fn auto_rollback() {
     let factory = Factory::get().unwrap();
 
     let db = factory
-        .open("baz", 1, |evt| {
+        .open("baz", 1, |evt| async move {
             let db = evt.database();
             db.build_object_store("data").auto_increment().create()?;
             Ok(())

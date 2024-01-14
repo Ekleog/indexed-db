@@ -1,6 +1,10 @@
 use crate::{utils::generic_request, Database};
 use futures_channel::oneshot;
-use std::marker::PhantomData;
+use futures_util::{
+    future::{self, Either},
+    pin_mut, FutureExt,
+};
+use std::{future::Future, marker::PhantomData};
 use web_sys::{
     js_sys::Function,
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
@@ -86,14 +90,16 @@ impl<Err: 'static> Factory<Err> {
     ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
-    pub async fn open(
+    pub async fn open<Fun, RetFut>(
         &self,
         name: &str,
         version: u32,
-        // TODO: this _could_ not take 'static, but that'd require an unsafe lifetime expansion in order to pass through
-        // the `Closure::once` bound. So, let's not do it until a reasonable use case arises.
-        on_upgrade_needed: impl 'static + FnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
-    ) -> crate::Result<Database<Err>, Err> {
+        on_upgrade_needed: Fun,
+    ) -> crate::Result<Database<Err>, Err>
+    where
+        Fun: FnOnce(VersionChangeEvent<Err>) -> RetFut,
+        RetFut: Future<Output = crate::Result<(), Err>>,
+    {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
         }
@@ -103,28 +109,27 @@ impl<Err: 'static> Factory<Err> {
             .open_with_u32(name, version)
             .map_err(crate::Error::from_js_value)?;
 
-        let (tx, mut rx) = oneshot::channel();
+        let (tx, rx) = oneshot::channel();
         let closure = Closure::once(|evt: IdbVersionChangeEvent| {
             let evt = VersionChangeEvent::from_sys(evt);
-            match on_upgrade_needed(evt) {
-                Ok(()) => (),
-                Err(e) => {
-                    if let Err(_) = tx.send(e) {
-                        panic!("IDBOpenDBRequest's on_success handler was called before on_upgrade_needed");
-                    }
-                    return;
-                }
+            if let Err(_) = tx.send(evt) {
+                panic!("IDBOpenDBRequest's on_success handler was called before on_upgrade_needed");
             }
         });
         open_req.set_onupgradeneeded(Some(closure.as_ref().dyn_ref::<Function>().unwrap()));
 
-        generic_request(open_req.clone().into())
-            .await
-            .map_err(crate::Error::from_js_event)?;
+        let completion_fut = generic_request(open_req.clone().into())
+            .map(|res| res.map_err(crate::Error::from_js_event));
+        pin_mut!(completion_fut);
 
-        match rx.try_recv() {
-            Ok(Some(err)) => return Err(err),
-            _ => (),
+        match future::select(rx, completion_fut).await {
+            Either::Right((completion, _)) => {
+                completion?;
+            }
+            Either::Left((evt, completion_fut)) => {
+                on_upgrade_needed(evt.expect("Closure dropped before its end of scope")).await?;
+                completion_fut.await?;
+            }
         }
 
         let db = open_req

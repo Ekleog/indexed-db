@@ -10,7 +10,7 @@ async fn example() -> anyhow::Result<()> {
 
     // Open the database, creating it if needed
     let db = factory
-        .open("database", 1, |evt| {
+        .open("database", 1, |evt| async move {
             let db = evt.database();
             db.build_object_store("store").auto_increment().create()?;
             Ok(())
