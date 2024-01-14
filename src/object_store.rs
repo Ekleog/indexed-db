@@ -99,20 +99,19 @@ impl<Err> ObjectStore<Err> {
     /// Counts the number of objects with a key in `range`
     ///
     /// Internally, this uses [`IDBObjectStore::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/count).
-    pub fn count_in_range(
+    pub fn count_in(
         &self,
         range: impl RangeBounds<JsValue>,
     ) -> impl Future<Output = Result<usize, crate::Error<Err>>> {
         let range = match make_key_range(range) {
-            Ok(Some(range)) => range,
-            Ok(None) => return Either::Left(Either::Left(self.count())),
-            Err(e) => return Either::Left(Either::Right(std::future::ready(Err(e)))),
+            Ok(range) => range,
+            Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
         match self.sys.count_with_key(&range) {
             Ok(count_req) => {
                 Either::Right(transaction_request(count_req).map(|res| res.map(map_count_res)))
             }
-            Err(e) => Either::Left(Either::Right(std::future::ready(Err(map_count_err(e))))),
+            Err(e) => Either::Left(std::future::ready(Err(map_count_err(e)))),
         }
     }
 
@@ -140,15 +139,14 @@ impl<Err> ObjectStore<Err> {
         range: impl RangeBounds<JsValue>,
     ) -> impl Future<Output = Result<(), crate::Error<Err>>> {
         let range = match make_key_range(range) {
-            Ok(Some(range)) => range,
-            Ok(None) => return Either::Left(Either::Left(self.clear())),
-            Err(e) => return Either::Left(Either::Right(std::future::ready(Err(e)))),
+            Ok(range) => range,
+            Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
         match self.sys.delete(&range) {
             Ok(delete_req) => {
                 Either::Right(transaction_request(delete_req).map(|res| res.map(|_| ())))
             }
-            Err(e) => Either::Left(Either::Right(std::future::ready(Err(map_delete_err(e))))),
+            Err(e) => Either::Left(std::future::ready(Err(map_delete_err(e)))),
         }
     }
 
@@ -239,13 +237,9 @@ fn map_get_err<Err>(err: JsValue) -> crate::Error<Err> {
     .into_user()
 }
 
-fn make_key_range<Err>(
-    range: impl RangeBounds<JsValue>,
-) -> Result<Option<IdbKeyRange>, crate::Error<Err>> {
-    let range = match (range.start_bound(), range.end_bound()) {
-        (Bound::Unbounded, Bound::Unbounded) => {
-            return Ok(None);
-        }
+fn make_key_range<Err>(range: impl RangeBounds<JsValue>) -> Result<JsValue, crate::Error<Err>> {
+    match (range.start_bound(), range.end_bound()) {
+        (Bound::Unbounded, Bound::Unbounded) => return Ok(JsValue::NULL), // NULL means the whole store
         (Bound::Unbounded, Bound::Included(b)) => IdbKeyRange::upper_bound_with_open(b, false),
         (Bound::Unbounded, Bound::Excluded(b)) => IdbKeyRange::upper_bound_with_open(b, true),
         (Bound::Included(b), Bound::Unbounded) => IdbKeyRange::lower_bound_with_open(b, false),
@@ -262,13 +256,13 @@ fn make_key_range<Err>(
         (Bound::Excluded(l), Bound::Excluded(u)) => {
             IdbKeyRange::bound_with_lower_open_and_upper_open(l, u, true, true)
         }
-    };
-    match range {
-        Ok(range) => Ok(Some(range)),
-        Err(err) => Err(match error_name!(&err) {
+    }
+    .map(|k| k.into())
+    .map_err(|err| {
+        match error_name!(&err) {
             Some("DataError") => crate::Error::InvalidKey,
             _ => crate::Error::from_js_value(err),
         }
-        .into_user()),
-    }
+        .into_user()
+    })
 }

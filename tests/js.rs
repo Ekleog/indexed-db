@@ -104,7 +104,7 @@ async fn smoke_test() {
             // Count range
             assert_eq!(
                 stuffs
-                    .count_in_range(Number::from(2).as_ref()..=Number::from(3).as_ref())
+                    .count_in(Number::from(2).as_ref()..=Number::from(3).as_ref())
                     .await?,
                 1
             );
@@ -114,6 +114,7 @@ async fn smoke_test() {
                 .delete_range(Number::from(2).as_ref()..=Number::from(3).as_ref())
                 .await?;
             assert_eq!(stuffs.count().await?, 1);
+            assert_eq!(stuffs.count_in(..).await?, 1);
             stuffs.delete(&Number::from(1)).await?;
             assert_eq!(stuffs.count().await?, 0);
 
