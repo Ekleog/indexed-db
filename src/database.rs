@@ -1,5 +1,3 @@
-#[cfg(doc)]
-use crate::ObjectStore;
 use crate::{utils::str_slice_to_array, ObjectStore, TransactionBuilder};
 use std::marker::PhantomData;
 use web_sys::{IdbDatabase, IdbObjectStoreParameters};
