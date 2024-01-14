@@ -8,6 +8,11 @@ use web_sys::{
 };
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
+///
+/// Note that it's quite likely that type inference will fail on the `Err` generic argument here.
+/// This argument is the type of user-defined errors that will be passed through transactions and
+/// callbacks.
+/// You should set it to whatever error type your program uses around the `indexed-db`-using code.
 #[derive(Debug)]
 pub struct Factory<Err> {
     sys: IdbFactory,

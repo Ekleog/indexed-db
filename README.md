@@ -10,9 +10,11 @@ This crate forces your transactions to respect the IndexedDB requirements, so as
 
 ## Error handling
 
-This crate uses an `Error<E>` type. Most of the functions not designed to be called inside a transaction return `Error`, one variant of this type that does not have any `E` payload.
+This crate uses an `Error<Err>` type. The `Err` generic argument is present on basically all the structs exposed by this crate. It is the type of users in code surrounding `indexed-db` usage, for convenience.
 
-However, in order to make transactions easy to write, the callback that you need to provide to `TransactionBuilder::run` returns `Result<T, Error<E>>` where both `T` and `E` are user-defined types. This is to make it easy for you to use your own error type. `E` will be automatically wrapped into `Error<E>`, and can be unwrapped by matching the error with `Error::User(_)`.
+In particular, if you ever want to recover one of your own errors (of type `Err`) that went through `indexed-db` code, you should just match the error with `Error::User(_)`, and you will be able to recover your own error details.
+
+On the other hand, when one of your callbacks wants to return an error of your own type through `indexed-db`, it can just use the `From<Err> for Error<Err>` implementation. This is done automatically by the `?` operator, or can be done manually for explicit returns with `return Err(e.into());`.
 
 ## Example
 
