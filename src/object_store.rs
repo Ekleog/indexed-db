@@ -98,6 +98,8 @@ impl<Err> ObjectStore<Err> {
 
     /// Counts the number of objects with a key in `range`
     ///
+    /// Note that the unbounded range is not a valid range for IndexedDB.
+    ///
     /// Internally, this uses [`IDBObjectStore::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/count).
     pub fn count_in(
         &self,
@@ -131,6 +133,7 @@ impl<Err> ObjectStore<Err> {
 
     /// Delete all the objects with a key in `range`
     ///
+    /// Note that the unbounded range is not a valid range for IndexedDB.
     /// Unfortunately, the IndexedDb API does not indicate whether an object was actually deleted.
     ///
     /// Internally, this uses [`IDBObjectStore::delete`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/delete).
@@ -162,6 +165,27 @@ impl<Err> ObjectStore<Err> {
                 Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
             }
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
+        }
+    }
+
+    /// Get the first value with a key in `range`, ordered by key
+    ///
+    /// Note that the unbounded range is not a valid range for IndexedDB.
+    ///
+    /// Internally, this uses [`IDBObjectStore::get`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/get).
+    pub fn get_first_in(
+        &self,
+        range: impl RangeBounds<JsValue>,
+    ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
+        let range = match make_key_range(range) {
+            Ok(range) => range,
+            Err(e) => return Either::Left(std::future::ready(Err(e))),
+        };
+        match self.sys.get(&range) {
+            Ok(get_req) => {
+                Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
+            }
+            Err(e) => Either::Left(std::future::ready(Err(map_get_err(e)))),
         }
     }
 }
@@ -239,7 +263,7 @@ fn map_get_err<Err>(err: JsValue) -> crate::Error<Err> {
 
 fn make_key_range<Err>(range: impl RangeBounds<JsValue>) -> Result<JsValue, crate::Error<Err>> {
     match (range.start_bound(), range.end_bound()) {
-        (Bound::Unbounded, Bound::Unbounded) => return Ok(JsValue::NULL), // NULL means the whole store
+        (Bound::Unbounded, Bound::Unbounded) => return Err(crate::Error::InvalidRange),
         (Bound::Unbounded, Bound::Included(b)) => IdbKeyRange::upper_bound_with_open(b, false),
         (Bound::Unbounded, Bound::Excluded(b)) => IdbKeyRange::upper_bound_with_open(b, true),
         (Bound::Included(b), Bound::Unbounded) => IdbKeyRange::lower_bound_with_open(b, false),

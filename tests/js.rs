@@ -114,7 +114,6 @@ async fn smoke_test() {
                 .delete_range(Number::from(2).as_ref()..=Number::from(3).as_ref())
                 .await?;
             assert_eq!(stuffs.count().await?, 1);
-            assert_eq!(stuffs.count_in(..).await?, 1);
             stuffs.delete(&Number::from(1)).await?;
             assert_eq!(stuffs.count().await?, 0);
 
@@ -136,6 +135,13 @@ async fn smoke_test() {
                 **JsString::from("value")
             );
             assert!(objects.get(&JsString::from("nokey")).await?.is_none());
+            assert_eq!(
+                objects
+                    .get_first_in(..JsString::from("zzz").as_ref())
+                    .await?
+                    .unwrap(),
+                **JsString::from("value")
+            );
 
             Ok::<_, indexed_db::Error<()>>(())
         })

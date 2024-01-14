@@ -78,6 +78,10 @@ pub enum Error<E = Void> {
     #[error("Unable to clone")]
     FailedClone,
 
+    /// Invalid range
+    #[error("Invalid range")]
+    InvalidRange,
+
     /// User-provided error to pass through `indexed-db` code
     #[error(transparent)]
     User(#[from] E),
@@ -133,6 +137,7 @@ impl Error {
             Error::ObjectStoreWasRemoved => Error::ObjectStoreWasRemoved,
             Error::ReadOnly => Error::ReadOnly,
             Error::FailedClone => Error::FailedClone,
+            Error::InvalidRange => Error::InvalidRange,
             Error::User(u) => match u {},
         }
     }
