@@ -6,18 +6,14 @@ use web_sys::{
 /// Type alias for convenience
 pub type Result<T> = std::result::Result<T, Error>;
 
-// TODO: replace with ! once Rust 2024 lands
-#[doc(hidden)]
-#[derive(Debug)]
-pub enum Void {}
-
 /// Error type for all errors from this crate
 ///
 /// The `E` generic argument is used for when user-defined error types should
 /// be allowed, eg. when the user provides a callback.
+// TODO: replace void::Void with `!` once `never_type` is stable
 #[derive(Clone, Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum Error<E = Void> {
+pub enum Error<E = void::Void> {
     /// Not running in a browser window
     #[error("Not running in a browser window")]
     NotInBrowser,

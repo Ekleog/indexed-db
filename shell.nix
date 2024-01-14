@@ -9,6 +9,7 @@ pkgs.stdenv.mkDerivation {
       cargo-nextest
       chromedriver
       geckodriver
+      just
       niv
       wasm-bindgen-cli
       wasm-pack
