@@ -4,7 +4,7 @@ Bindings for IndexedDB, that default transaction to aborting.
 
 ## Why yet another IndexedDB crate?
 
-As of the time of writing this crate, most of the alternatives to this crate have the default IndexedDB behavior of transaction committing. This is because IndexedDB transactions have strange committing semantics.
+As of the time of my writing this crate, the alternatives have the default IndexedDB behavior of transaction committing. This is because IndexedDB transactions have strange committing semantics: they commit as soon as the application returns to the event loop without an ongoing request.
 
 This crate forces your transactions to respect the IndexedDB requirements, so as to make it possible to abort transactions upon errors, rather than having them auto-commit.
 
