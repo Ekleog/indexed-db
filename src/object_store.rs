@@ -151,6 +151,29 @@ impl<Err> ObjectStore<Err> {
             Err(e) => Either::Left(Either::Right(std::future::ready(Err(map_delete_err(e))))),
         }
     }
+
+    /// Get the object with key `key`
+    ///
+    /// Internally, this uses [`IDBObjectStore::get`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/get).
+    pub fn get(
+        &self,
+        key: &JsValue,
+    ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
+        match self.sys.get(key) {
+            Ok(get_req) => {
+                Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
+            }
+            Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
+        }
+    }
+}
+
+fn none_if_undefined(v: JsValue) -> Option<JsValue> {
+    if v.is_undefined() {
+        None
+    } else {
+        Some(v)
+    }
 }
 
 fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
@@ -183,7 +206,7 @@ fn map_count_err<Err>(err: JsValue) -> crate::Error<Err> {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
         Some("TransactionInactiveError") => {
-            panic!("Tried adding to an ObjectStore while the transaction was inactive")
+            panic!("Tried counting in an ObjectStore while the transaction was inactive")
         }
         Some("DataError") => crate::Error::InvalidKey,
         _ => crate::Error::from_js_value(err),
@@ -196,7 +219,19 @@ fn map_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
         Some("ReadOnlyError") => crate::Error::ReadOnly,
         Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
         Some("TransactionInactiveError") => {
-            panic!("Tried adding to an ObjectStore while the transaction was inactive")
+            panic!("Tried deleting from an ObjectStore while the transaction was inactive")
+        }
+        Some("DataError") => crate::Error::InvalidKey,
+        _ => crate::Error::from_js_value(err),
+    }
+    .into_user()
+}
+
+fn map_get_err<Err>(err: JsValue) -> crate::Error<Err> {
+    match error_name!(&err) {
+        Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
+        Some("TransactionInactiveError") => {
+            panic!("Tried getting from an ObjectStore while the transaction was inactive")
         }
         Some("DataError") => crate::Error::InvalidKey,
         _ => crate::Error::from_js_value(err),

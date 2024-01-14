@@ -121,4 +121,23 @@ async fn smoke_test() {
         })
         .await
         .unwrap();
+    db.transaction(&["objects"])
+        .rw()
+        .run(|t| async move {
+            let objects = t.object_store("objects")?;
+
+            // Get
+            objects
+                .add_kv(&JsString::from("key"), &JsString::from("value"))
+                .await?;
+            assert_eq!(
+                objects.get(&JsString::from("key")).await?.unwrap(),
+                **JsString::from("value")
+            );
+            assert!(objects.get(&JsString::from("nokey")).await?.is_none());
+
+            Ok::<_, indexed_db::Error<()>>(())
+        })
+        .await
+        .unwrap();
 }
