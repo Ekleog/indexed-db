@@ -1,3 +1,4 @@
+use crate::utils::map_cursor_advance_err;
 use std::marker::PhantomData;
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
@@ -32,18 +33,45 @@ impl CursorDirection {
 
 /// Wrapper for [`IDBCursorWithValue`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursorWithValue)
 pub struct Cursor<Err> {
-    _sys: IdbCursorWithValue,
+    sys: IdbCursorWithValue,
     _phantom: PhantomData<Err>,
 }
 
 impl<Err> Cursor<Err> {
     pub(crate) fn from(value: JsValue) -> Cursor<Err> {
         Cursor {
-            _sys: value
+            sys: value
                 .dyn_into::<IdbCursorWithValue>()
                 .expect("Cursor-returning function did not return an IDBCursorWithValue"),
             _phantom: PhantomData,
         }
+    }
+
+    /// Retrieve the value this [`Cursor`] is currently pointing at
+    ///
+    /// Internally, this uses the [`IDBCursorWithValue::value`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursorWithValue/value) property.
+    pub fn value(&self) -> JsValue {
+        self.sys
+            .value()
+            .expect("Failed retrieving value from known-good cursor")
+    }
+
+    /// Retrieve the key this [`Cursor`] is currently pointing at
+    ///
+    /// Internally, this uses the [`IDBCursor::key`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/key) property.
+    pub fn key(&self) -> JsValue {
+        self.sys
+            .key()
+            .expect("Failed retrieving key from known-good cursor")
+    }
+
+    /// Advance this [`Cursor`] by `count` elements
+    ///
+    /// Panics if `count` is `0`.
+    ///
+    /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
+    pub fn advance(&self, count: u32) -> crate::Result<(), Err> {
+        self.sys.advance(count).map_err(map_cursor_advance_err)
     }
 }
 

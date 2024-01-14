@@ -77,6 +77,10 @@ pub enum Error<E> {
     #[error("Invalid range")]
     InvalidRange,
 
+    /// Cursor finished its range
+    #[error("Cursor finished its range")]
+    CursorCompleted,
+
     /// User-provided error to pass through `indexed-db` code
     #[error(transparent)]
     User(#[from] E),
