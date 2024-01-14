@@ -1,6 +1,9 @@
 use crate::{
     transaction::transaction_request,
-    utils::{map_cursor_advance_err, map_cursor_advance_until_err},
+    utils::{
+        map_cursor_advance_err, map_cursor_advance_until_err,
+        map_cursor_advance_until_primary_key_err, slice_to_array,
+    },
 };
 use std::marker::PhantomData;
 use web_sys::{
@@ -85,11 +88,12 @@ impl<Err> Cursor<Err> {
     ///
     /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
     pub async fn advance(&mut self, count: u32) -> crate::Result<(), Err> {
-        if let Some(sys) = &self.sys {
-            sys.advance(count).map_err(map_cursor_advance_err)?;
-            if transaction_request(self.req.clone()).await?.is_null() {
-                self.sys = None;
-            }
+        let Some(sys) = &self.sys else {
+            return Err(crate::Error::CursorCompleted);
+        };
+        sys.advance(count).map_err(map_cursor_advance_err)?;
+        if transaction_request(self.req.clone()).await?.is_null() {
+            self.sys = None;
         }
         Ok(())
     }
@@ -101,12 +105,39 @@ impl<Err> Cursor<Err> {
     ///
     /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
     pub async fn advance_until(&mut self, key: &JsValue) -> crate::Result<(), Err> {
-        if let Some(sys) = &self.sys {
-            sys.continue_with_key(key)
-                .map_err(map_cursor_advance_until_err)?;
-            if transaction_request(self.req.clone()).await?.is_null() {
-                self.sys = None;
-            }
+        let Some(sys) = &self.sys else {
+            return Err(crate::Error::CursorCompleted);
+        };
+        sys.continue_with_key(key)
+            .map_err(map_cursor_advance_until_err)?;
+        if transaction_request(self.req.clone()).await?.is_null() {
+            self.sys = None;
+        }
+        Ok(())
+    }
+
+    /// Advance this [`Cursor`] until the provided primary key
+    ///
+    /// This is a helper function for cursors built on top of [`Index`]es. It allows for
+    /// quick resumption of index walking, faster than [`Cursor::advance_until`] if the
+    /// primary key for the wanted element is known.
+    ///
+    /// Note that this method does not work on cursors over object stores, nor on cursors
+    /// which are set with a direction of anything other than `Next` or `Prev`.
+    ///
+    /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
+    pub async fn advance_until_primary_key(
+        &mut self,
+        index_key: &[&JsValue],
+        primary_key: &JsValue,
+    ) -> crate::Result<(), Err> {
+        let Some(sys) = &self.sys else {
+            return Err(crate::Error::CursorCompleted);
+        };
+        sys.continue_primary_key(&slice_to_array(index_key), primary_key)
+            .map_err(map_cursor_advance_until_primary_key_err)?;
+        if transaction_request(self.req.clone()).await?.is_null() {
+            self.sys = None;
         }
         Ok(())
     }
