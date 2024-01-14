@@ -233,6 +233,70 @@ impl<Err> ObjectStore<Err> {
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }
+
+    /// Get the first existing key in the provided range
+    ///
+    /// Internally, this uses [`IDBObjectStore::getKey`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/getKey).
+    pub fn get_first_key_in(
+        &self,
+        range: impl RangeBounds<JsValue>,
+    ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
+        let range = match make_key_range(range) {
+            Ok(range) => range,
+            Err(e) => return Either::Left(std::future::ready(Err(e))),
+        };
+        match self.sys.get_key(&range) {
+            Ok(get_req) => {
+                Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
+            }
+            Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
+        }
+    }
+
+    /// List all the keys in the object store, with a maximum number of results of `limit`
+    ///
+    /// Internally, this uses [`IDBObjectStore::getAllKeys`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/getAllKeys).
+    pub fn get_all_keys(
+        &self,
+        limit: Option<u32>,
+    ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
+        let get_req = match limit {
+            None => self.sys.get_all_keys(),
+            Some(limit) => self
+                .sys
+                .get_all_keys_with_key_and_limit(&JsValue::UNDEFINED, limit),
+        };
+        match get_req {
+            Ok(get_req) => {
+                Either::Right(transaction_request(get_req).map(|res| res.map(array_to_vec)))
+            }
+            Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
+        }
+    }
+
+    /// List all the keys in the provided range, with a maximum number of results of `limit`
+    ///
+    /// Internally, this uses [`IDBObjectStore::getAllKeys`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/getAllKeys).
+    pub fn get_all_keys_in(
+        &self,
+        range: impl RangeBounds<JsValue>,
+        limit: Option<u32>,
+    ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
+        let range = match make_key_range(range) {
+            Ok(range) => range,
+            Err(e) => return Either::Left(std::future::ready(Err(e))),
+        };
+        let get_req = match limit {
+            None => self.sys.get_all_keys_with_key(&range),
+            Some(limit) => self.sys.get_all_keys_with_key_and_limit(&range, limit),
+        };
+        match get_req {
+            Ok(get_req) => {
+                Either::Right(transaction_request(get_req).map(|res| res.map(array_to_vec)))
+            }
+            Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
+        }
+    }
 }
 
 fn none_if_undefined(v: JsValue) -> Option<JsValue> {
