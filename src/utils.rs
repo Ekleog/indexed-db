@@ -2,7 +2,7 @@ use futures_channel::oneshot;
 use futures_util::future::{self, Either};
 use std::ops::{Bound, RangeBounds};
 use web_sys::{
-    js_sys::{Array, Function, Number},
+    js_sys::{Array, Function, Number, JsString},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
     IdbKeyRange, IdbRequest,
 };
@@ -39,6 +39,14 @@ pub(crate) fn array_to_vec(v: JsValue) -> Vec<JsValue> {
     let mut res = Vec::with_capacity(usize::try_from(len).unwrap());
     for i in 0..len {
         res.push(array.get(i));
+    }
+    res
+}
+
+pub(crate) fn str_slice_to_array(s: &[&str]) -> Array {
+    let res = Array::new_with_length(u32::try_from(s.len()).unwrap());
+    for (i, v) in s.iter().enumerate() {
+        res.set(u32::try_from(i).unwrap(), **JsString::from(*v));
     }
     res
 }

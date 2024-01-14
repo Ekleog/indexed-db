@@ -1,6 +1,6 @@
 #[cfg(doc)]
 use crate::ObjectStore;
-use crate::TransactionBuilder;
+use crate::{TransactionBuilder, utils::str_slice_to_array};
 use web_sys::{
     js_sys::{Array, JsString},
     IdbDatabase, IdbIndexParameters, IdbObjectStore, IdbObjectStoreParameters,
@@ -125,11 +125,7 @@ impl<'a> ObjectStoreBuilder<'a> {
     ///
     /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#keypath).
     pub fn key_path(mut self, path: &[&str]) -> Self {
-        let arg = Array::new();
-        for p in path {
-            arg.push(&JsString::from(*p));
-        }
-        self.options.key_path(Some(&arg));
+        self.options.key_path(Some(&str_slice_to_array(path)));
         self
     }
 
@@ -160,14 +156,10 @@ impl ObjectStoreConfigurator {
     ///
     /// Internally, this uses [`IDBObjectStore::createIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex).
     pub fn build_index<'a>(&self, name: &'a str, key_path: &[&str]) -> IndexBuilder<'a> {
-        let key = Array::new();
-        for p in key_path {
-            key.push(&JsString::from(*p));
-        }
         IndexBuilder {
             store: self.sys.clone(),
             name,
-            key_path: key,
+            key_path: str_slice_to_array(key_path),
             options: IdbIndexParameters::new(),
         }
     }

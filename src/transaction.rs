@@ -1,4 +1,4 @@
-use crate::ObjectStore;
+use crate::{ObjectStore, utils::str_slice_to_array};
 use futures_channel::oneshot;
 use futures_util::future::{self, Either};
 use std::{
@@ -20,13 +20,9 @@ pub struct TransactionBuilder {
 
 impl TransactionBuilder {
     pub(crate) fn from_names(db: IdbDatabase, names: &[&str]) -> TransactionBuilder {
-        let stores = Array::new();
-        for s in names {
-            stores.push(&JsString::from(*s));
-        }
         TransactionBuilder {
             db,
-            stores: stores.into(),
+            stores: **str_slice_to_array(names),
             mode: IdbTransactionMode::Readonly,
         }
     }
