@@ -17,7 +17,7 @@ mod object_store;
 mod transaction;
 mod utils;
 
-pub use cursor::{Cursor, CursorDirection, KeyCursor};
+pub use cursor::{Cursor, CursorDirection};
 pub use database::{Database, ObjectStoreBuilder};
 pub use error::{Error, Result};
 pub use factory::{Factory, VersionChangeEvent};

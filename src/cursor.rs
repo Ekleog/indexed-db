@@ -8,7 +8,7 @@ use crate::{
 use std::marker::PhantomData;
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
-    IdbCursorDirection, IdbCursorWithValue, IdbRequest,
+    IdbCursor, IdbCursorDirection, IdbCursorWithValue, IdbRequest,
 };
 
 #[cfg(doc)]
@@ -44,7 +44,7 @@ impl CursorDirection {
 
 /// Wrapper for [`IDBCursorWithValue`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursorWithValue)
 pub struct Cursor<Err> {
-    sys: Option<IdbCursorWithValue>,
+    sys: Option<IdbCursor>,
     req: IdbRequest,
     _phantom: PhantomData<Err>,
 }
@@ -54,8 +54,8 @@ impl<Err> Cursor<Err> {
         let res = transaction_request(req.clone()).await?;
         let is_already_over = res.is_null();
         let sys = (!is_already_over).then(|| {
-            res.dyn_into::<IdbCursorWithValue>()
-                .expect("Cursor-returning request did not return an IDBCursorWithValue")
+            res.dyn_into::<IdbCursor>()
+                .expect("Cursor-returning request did not return an IDBCursor")
         });
         Ok(Cursor {
             sys,
@@ -64,17 +64,21 @@ impl<Err> Cursor<Err> {
         })
     }
 
-    /// Retrieve the value this [`Cursor`] is currently pointing at
+    /// Retrieve the value this [`Cursor`] is currently pointing at, or `None` if the cursor is completed
+    ///
+    /// If this cursor was opened as a key-only cursor, then trying to call this method will panic.
     ///
     /// Internally, this uses the [`IDBCursorWithValue::value`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursorWithValue/value) property.
     pub fn value(&self) -> Option<JsValue> {
         self.sys.as_ref().map(|sys| {
-            sys.value()
-                .expect("Failed retrieving value from known-good cursor")
+            sys.dyn_ref::<IdbCursorWithValue>()
+                .expect("Called Cursor::value on a key-only cursor")
+                .value()
+                .expect("Unable to retrieve value from known-good cursor")
         })
     }
 
-    /// Retrieve the key this [`Cursor`] is currently pointing at
+    /// Retrieve the key this [`Cursor`] is currently pointing at, or `None` if the cursor is completed
     ///
     /// Internally, this uses the [`IDBCursor::key`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/key) property.
     pub fn key(&self) -> Option<JsValue> {
@@ -141,10 +145,4 @@ impl<Err> Cursor<Err> {
         }
         Ok(())
     }
-}
-
-/// Wrapper for [`IDBCursor`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor)
-pub struct KeyCursor<Err> {
-    // TODO
-    _phantom: PhantomData<Err>,
 }
