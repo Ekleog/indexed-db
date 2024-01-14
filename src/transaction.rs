@@ -1,11 +1,11 @@
-use crate::{ObjectStore, utils::str_slice_to_array};
+use crate::{utils::str_slice_to_array, ObjectStore};
 use futures_channel::oneshot;
 use futures_util::future::{self, Either};
 use std::{
     cell::Cell, future::Future, marker::PhantomData, panic::AssertUnwindSafe, pin::Pin, task::Poll,
 };
 use web_sys::{
-    js_sys::{Array, Function, JsString},
+    js_sys::Function,
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
 };
@@ -22,7 +22,7 @@ impl TransactionBuilder {
     pub(crate) fn from_names(db: IdbDatabase, names: &[&str]) -> TransactionBuilder {
         TransactionBuilder {
             db,
-            stores: **str_slice_to_array(names),
+            stores: str_slice_to_array(names).into(),
             mode: IdbTransactionMode::Readonly,
         }
     }

@@ -1,9 +1,8 @@
 #[cfg(doc)]
 use crate::ObjectStore;
-use crate::{TransactionBuilder, utils::str_slice_to_array};
+use crate::{utils::str_slice_to_array, TransactionBuilder};
 use web_sys::{
-    js_sys::{Array, JsString},
-    IdbDatabase, IdbIndexParameters, IdbObjectStore, IdbObjectStoreParameters,
+    js_sys::Array, IdbDatabase, IdbIndexParameters, IdbObjectStore, IdbObjectStoreParameters,
 };
 
 /// Wrapper for [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)

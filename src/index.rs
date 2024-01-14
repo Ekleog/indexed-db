@@ -1,7 +1,8 @@
 use crate::{
     transaction::transaction_request,
     utils::{
-        array_to_vec, make_key_range, map_count_err, map_count_res, map_get_err, none_if_undefined,
+        array_to_vec, make_key_range, make_key_range_from_slice, map_count_err, map_count_res,
+        map_get_err, none_if_undefined, slice_to_array,
     },
 };
 use futures_util::future::{Either, FutureExt};
@@ -47,9 +48,9 @@ impl<Err> Index<Err> {
     /// Internally, this uses [`IDBIndex::get`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/get).
     pub fn get(
         &self,
-        key: &JsValue,
+        key: &[&JsValue],
     ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
-        match self.sys.get(key) {
+        match self.sys.get(&slice_to_array(key)) {
             Ok(get_req) => {
                 Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
             }
@@ -62,11 +63,11 @@ impl<Err> Index<Err> {
     /// Note that the unbounded range is not a valid range for IndexedDB.
     ///
     /// Internally, this uses [`IDBIndex::get`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/get).
-    pub fn get_first_in(
+    pub fn get_first_in<'a>(
         &self,
-        range: impl RangeBounds<JsValue>,
+        range: impl RangeBounds<[&'a JsValue]>,
     ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
-        let range = match make_key_range(range) {
+        let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
@@ -103,12 +104,12 @@ impl<Err> Index<Err> {
     /// results of `limit`, ordered by this index
     ///
     /// Internally, this uses [`IDBIndex::getAll`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/getAll).
-    pub fn get_all_in(
+    pub fn get_all_in<'a>(
         &self,
-        range: impl RangeBounds<JsValue>,
+        range: impl RangeBounds<[&'a JsValue]>,
         limit: Option<u32>,
     ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
-        let range = match make_key_range(range) {
+        let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
@@ -127,11 +128,11 @@ impl<Err> Index<Err> {
     /// Get the first existing key (for this index) in the provided range
     ///
     /// Internally, this uses [`IDBIndex::getKey`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/getKey).
-    pub fn get_first_key_in(
+    pub fn get_first_key_in<'a>(
         &self,
-        range: impl RangeBounds<JsValue>,
+        range: impl RangeBounds<[&'a JsValue]>,
     ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
-        let range = match make_key_range(range) {
+        let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
@@ -168,12 +169,12 @@ impl<Err> Index<Err> {
     /// ordered by this index
     ///
     /// Internally, this uses [`IDBIndex::getAllKeys`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/getAllKeys).
-    pub fn get_all_keys_in(
+    pub fn get_all_keys_in<'a>(
         &self,
-        range: impl RangeBounds<JsValue>,
+        range: impl RangeBounds<[&'a JsValue]>,
         limit: Option<u32>,
     ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
-        let range = match make_key_range(range) {
+        let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
         };

@@ -2,7 +2,7 @@ use futures_channel::oneshot;
 use futures_util::future::{self, Either};
 use std::ops::{Bound, RangeBounds};
 use web_sys::{
-    js_sys::{Array, Function, Number, JsString},
+    js_sys::{Array, Function, JsString, Number},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
     IdbKeyRange, IdbRequest,
 };
@@ -43,10 +43,18 @@ pub(crate) fn array_to_vec(v: JsValue) -> Vec<JsValue> {
     res
 }
 
+pub(crate) fn slice_to_array(s: &[&JsValue]) -> Array {
+    let res = Array::new_with_length(u32::try_from(s.len()).unwrap());
+    for (i, v) in s.iter().enumerate() {
+        res.set(u32::try_from(i).unwrap(), (*v).clone());
+    }
+    res
+}
+
 pub(crate) fn str_slice_to_array(s: &[&str]) -> Array {
     let res = Array::new_with_length(u32::try_from(s.len()).unwrap());
     for (i, v) in s.iter().enumerate() {
-        res.set(u32::try_from(i).unwrap(), **JsString::from(*v));
+        res.set(u32::try_from(i).unwrap(), JsString::from(*v).into());
     }
     res
 }
@@ -112,6 +120,25 @@ pub(crate) fn map_get_err<Err>(err: JsValue) -> crate::Error<Err> {
         _ => crate::Error::from_js_value(err),
     }
     .into_user()
+}
+
+fn bound_map<T, U>(b: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
+    // TODO: replace with Bound::map once https://github.com/rust-lang/rust/issues/86026 is stable
+    match b {
+        Bound::Unbounded => Bound::Unbounded,
+        Bound::Included(b) => Bound::Included(f(b)),
+        Bound::Excluded(b) => Bound::Excluded(f(b)),
+    }
+}
+
+pub(crate) fn make_key_range_from_slice<'a, Err>(
+    range: impl RangeBounds<[&'a JsValue]>,
+) -> Result<JsValue, crate::Error<Err>> {
+    let range: (Bound<JsValue>, Bound<JsValue>) = (
+        bound_map(range.start_bound(), |s| slice_to_array(s).into()),
+        bound_map(range.end_bound(), |s| slice_to_array(s).into()),
+    );
+    make_key_range(range)
 }
 
 pub(crate) fn make_key_range<Err>(
