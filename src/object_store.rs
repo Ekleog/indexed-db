@@ -1,4 +1,4 @@
-use crate::transaction::transaction_request;
+use crate::{transaction::transaction_request, Index};
 use futures_util::future::{Either, FutureExt};
 use std::{
     future::Future,
@@ -332,7 +332,20 @@ impl<Err> ObjectStore<Err> {
         }
     }
 
-    // TODO: implement `index`
+    /// Get the [`Index`] with the provided name
+    ///
+    /// Internally, this uses [`IDBObjectStore::index`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/index).
+    pub fn index(&self, name: &str) -> Result<Index<Err>, crate::Error<Err>> {
+        Ok(Index::from_sys(self.sys.index(name).map_err(|err| {
+            match error_name!(&err) {
+                Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
+                Some("NotFoundError") => crate::Error::DoesNotExist,
+                _ => crate::Error::from_js_value(err),
+            }
+            .into_user()
+        })?))
+    }
+
     // TODO: implement `openCursor`
     // TODO: implement `openKeyCursor`
 }
