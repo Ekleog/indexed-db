@@ -2,7 +2,7 @@ use futures_channel::oneshot;
 use futures_util::future::{self, Either};
 use std::ops::{Bound, RangeBounds};
 use web_sys::{
-    js_sys::{Array, Function, JsString, Number},
+    js_sys::{Array, Function, JsString, Number, TypeError},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
     IdbKeyRange, IdbRequest,
 };
@@ -135,6 +135,7 @@ pub(crate) fn map_cursor_advance_err<Err>(err: JsValue) -> crate::Error<Err> {
         Some("TransactionInactiveError") => {
             panic!("Tried advancing a Cursor on an ObjectStore while the transaction was inactive")
         }
+        None if err.has_type::<TypeError>() => crate::Error::InvalidArgument,
         _ => crate::Error::from_js_value(err),
     }
 }

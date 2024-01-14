@@ -83,8 +83,6 @@ impl<Err> Cursor<Err> {
 
     /// Advance this [`Cursor`] by `count` elements
     ///
-    /// Panics if `count` is `0`.
-    ///
     /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
     pub async fn advance(&mut self, count: u32) -> crate::Result<(), Err> {
         if let Some(sys) = &self.sys {
