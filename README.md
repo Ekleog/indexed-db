@@ -95,6 +95,21 @@ async fn example() -> anyhow::Result<()> {
         })
         .await?;
 
+    // More complex example: using cursors to iterate over a store
+    db.transaction(&["store"])
+        .run(|t| async move {
+            let mut all_items = Vec::new();
+            let mut cursor = t.object_store("store")?.cursor().open().await?;
+            while let Some(value) = cursor.value() {
+                all_items.push(value);
+                cursor.advance(1).await?;
+            }
+            assert_eq!(all_items.len(), 3);
+            assert_eq!(all_items[0], **JsString::from("foo"));
+            Ok(())
+        })
+        .await?;
+
     Ok(())
 }
 ```
