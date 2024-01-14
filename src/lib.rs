@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 // Internal helper
 macro_rules! error_name {
     ($v:expr) => {

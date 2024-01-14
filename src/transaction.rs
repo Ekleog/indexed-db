@@ -136,6 +136,7 @@ pub(crate) async fn transaction_request<Err>(
         })
 }
 
+/// Wrapper for [`IDBTransaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
 pub struct Transaction<Err> {
     sys: IdbTransaction,
     _phantom: PhantomData<Err>,

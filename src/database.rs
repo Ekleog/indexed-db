@@ -1,3 +1,5 @@
+#[cfg(doc)]
+use crate::ObjectStore;
 use crate::TransactionBuilder;
 use web_sys::{
     js_sys::{Array, JsString},
@@ -93,6 +95,7 @@ impl Database {
     }
 }
 
+/// Helper to build an object store
 pub struct ObjectStoreBuilder<'a> {
     db: IdbDatabase,
     name: &'a str,
