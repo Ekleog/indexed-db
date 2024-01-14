@@ -2,7 +2,7 @@ use crate::{
     transaction::transaction_request,
     utils::{
         map_cursor_advance_err, map_cursor_advance_until_err,
-        map_cursor_advance_until_primary_key_err, slice_to_array,
+        map_cursor_advance_until_primary_key_err, map_cursor_delete_err, slice_to_array,
     },
 };
 use std::marker::PhantomData;
@@ -107,7 +107,7 @@ impl<Err> Cursor<Err> {
     /// Note that if this [`Cursor`] was built from an [`Index`], then you need to
     /// encode the [`Array`] yourself.
     ///
-    /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
+    /// Internally, this uses [`IDBCursor::continue`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/continue).
     pub async fn advance_until(&mut self, key: &JsValue) -> crate::Result<(), Err> {
         let Some(sys) = &self.sys else {
             return Err(crate::Error::CursorCompleted);
@@ -129,7 +129,7 @@ impl<Err> Cursor<Err> {
     /// Note that this method does not work on cursors over object stores, nor on cursors
     /// which are set with a direction of anything other than `Next` or `Prev`.
     ///
-    /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
+    /// Internally, this uses [`IDBCursor::continuePrimaryKey`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/continuePrimaryKey).
     pub async fn advance_until_primary_key(
         &mut self,
         index_key: &[&JsValue],
@@ -143,6 +143,20 @@ impl<Err> Cursor<Err> {
         if transaction_request(self.req.clone()).await?.is_null() {
             self.sys = None;
         }
+        Ok(())
+    }
+
+    /// Deletes the value currently pointed by this [`Cursor`]
+    ///
+    /// Note that this method does not work on key-only cursors over indexes.
+    ///
+    /// Internally, this uses [`IDBCursor::delete`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/delete).
+    pub async fn delete(&mut self) -> crate::Result<(), Err> {
+        let Some(sys) = &self.sys else {
+            return Err(crate::Error::CursorCompleted);
+        };
+        let req = sys.delete().map_err(map_cursor_delete_err)?;
+        transaction_request(req).await?;
         Ok(())
     }
 }
