@@ -1,3 +1,4 @@
+use anyhow::Context;
 use indexed_db::Factory;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 use web_sys::js_sys::JsString;
@@ -7,7 +8,7 @@ wasm_bindgen_test_configure!(run_in_browser);
 #[wasm_bindgen_test]
 #[should_panic(expected = "Transaction blocked without any request under way")]
 async fn other_awaits_panic() {
-    let factory = Factory::get().unwrap();
+    let factory = Factory::<anyhow::Error>::get().unwrap();
 
     let db = factory
         .open("baz", 1, |evt| {
@@ -24,7 +25,7 @@ async fn other_awaits_panic() {
         .rw()
         .run(|t| async move {
             t.object_store("data")?.add(&JsString::from("foo")).await?;
-            rx.await?;
+            rx.await.context("awaiting for something external")?;
             t.object_store("data")?.add(&JsString::from("bar")).await?;
             Ok(())
         })

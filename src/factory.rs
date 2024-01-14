@@ -1,5 +1,6 @@
 use crate::{utils::generic_request, Database};
 use futures_channel::oneshot;
+use std::marker::PhantomData;
 use web_sys::{
     js_sys::Function,
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
@@ -8,21 +9,25 @@ use web_sys::{
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
 #[derive(Debug)]
-pub struct Factory {
+pub struct Factory<Err> {
     sys: IdbFactory,
+    _phantom: PhantomData<Err>,
 }
 
-impl Factory {
+impl<Err: 'static> Factory<Err> {
     /// Retrieve the global `Factory` from the browser
     ///
     /// This internally uses [`indexedDB`](https://developer.mozilla.org/en-US/docs/Web/API/indexedDB).
-    pub fn get() -> crate::Result<Factory> {
+    pub fn get() -> crate::Result<Factory<Err>, Err> {
         let window = web_sys::window().ok_or(crate::Error::NotInBrowser)?;
         let sys = window
             .indexed_db()
             .map_err(|_| crate::Error::IndexedDbDisabled)?
             .ok_or(crate::Error::IndexedDbDisabled)?;
-        Ok(Factory { sys })
+        Ok(Factory {
+            sys,
+            _phantom: PhantomData,
+        })
     }
 
     /// Compare two keys for ordering
@@ -30,7 +35,7 @@ impl Factory {
     /// Returns an error if one of the two values would not be a valid IndexedDb key.
     ///
     /// This internally uses [`IDBFactory::cmp`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/cmp).
-    pub fn cmp(&self, lhs: &JsValue, rhs: &JsValue) -> crate::Result<std::cmp::Ordering> {
+    pub fn cmp(&self, lhs: &JsValue, rhs: &JsValue) -> crate::Result<std::cmp::Ordering, Err> {
         use std::cmp::Ordering::*;
         self.sys
             .cmp(lhs, rhs)
@@ -54,7 +59,7 @@ impl Factory {
     /// a database that does not exist will result in a successful result.
     ///
     /// This internally uses [`IDBFactory::deleteDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/deleteDatabase)
-    pub async fn delete_database(&self, name: &str) -> crate::Result<()> {
+    pub async fn delete_database(&self, name: &str) -> crate::Result<(), Err> {
         generic_request(
             self.sys
                 .delete_database(name)
@@ -82,8 +87,8 @@ impl Factory {
         version: u32,
         // TODO: this _could_ not take 'static, but that'd require an unsafe lifetime expansion in order to pass through
         // the `Closure::once` bound. So, let's not do it until a reasonable use case arises.
-        upgrader: impl 'static + FnOnce(VersionChangeEvent) -> crate::Result<()>,
-    ) -> crate::Result<Database> {
+        on_upgrade_needed: impl 'static + FnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
+    ) -> crate::Result<Database<Err>, Err> {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
         }
@@ -96,12 +101,12 @@ impl Factory {
         let (tx, mut rx) = oneshot::channel();
         let closure = Closure::once(|evt: IdbVersionChangeEvent| {
             let evt = VersionChangeEvent::from_sys(evt);
-            match upgrader(evt) {
+            match on_upgrade_needed(evt) {
                 Ok(()) => (),
                 Err(e) => {
-                    tx.send(e).expect(
-                        "IDBOpenDBRequest's on_success handler was called before on_upgrade_needed",
-                    );
+                    if let Err(_) = tx.send(e) {
+                        panic!("IDBOpenDBRequest's on_success handler was called before on_upgrade_needed");
+                    }
                     return;
                 }
             }
@@ -129,13 +134,13 @@ impl Factory {
 
 /// Wrapper for [`IDBVersionChangeEvent`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent)
 #[derive(Debug)]
-pub struct VersionChangeEvent {
+pub struct VersionChangeEvent<Err> {
     sys: IdbVersionChangeEvent,
-    db: Database,
+    db: Database<Err>,
 }
 
-impl VersionChangeEvent {
-    fn from_sys(sys: IdbVersionChangeEvent) -> VersionChangeEvent {
+impl<Err> VersionChangeEvent<Err> {
+    fn from_sys(sys: IdbVersionChangeEvent) -> VersionChangeEvent<Err> {
         let db_sys = sys
             .target()
             .expect("IDBVersionChangeEvent had no target")
@@ -166,7 +171,7 @@ impl VersionChangeEvent {
     }
 
     /// The database under creation
-    pub fn database(&self) -> &Database {
+    pub fn database(&self) -> &Database<Err> {
         &self.db
     }
 }

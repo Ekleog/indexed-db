@@ -30,7 +30,7 @@ impl<Err> Index<Err> {
     pub fn count_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = Result<usize, crate::Error<Err>>> {
+    ) -> impl Future<Output = crate::Result<usize, Err>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -49,7 +49,7 @@ impl<Err> Index<Err> {
     pub fn get(
         &self,
         key: &[&JsValue],
-    ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
         match self.sys.get(&slice_to_array(key)) {
             Ok(get_req) => {
                 Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
@@ -66,7 +66,7 @@ impl<Err> Index<Err> {
     pub fn get_first_in<'a>(
         &self,
         range: impl RangeBounds<[&'a JsValue]>,
-    ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
         let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -85,7 +85,7 @@ impl<Err> Index<Err> {
     pub fn get_all(
         &self,
         limit: Option<u32>,
-    ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
         let get_req = match limit {
             None => self.sys.get_all(),
             Some(limit) => self
@@ -108,7 +108,7 @@ impl<Err> Index<Err> {
         &self,
         range: impl RangeBounds<[&'a JsValue]>,
         limit: Option<u32>,
-    ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
         let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -131,7 +131,7 @@ impl<Err> Index<Err> {
     pub fn get_first_key_in<'a>(
         &self,
         range: impl RangeBounds<[&'a JsValue]>,
-    ) -> impl Future<Output = Result<Option<JsValue>, crate::Error<Err>>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
         let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -150,7 +150,7 @@ impl<Err> Index<Err> {
     pub fn get_all_keys(
         &self,
         limit: Option<u32>,
-    ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
         let get_req = match limit {
             None => self.sys.get_all_keys(),
             Some(limit) => self
@@ -173,7 +173,7 @@ impl<Err> Index<Err> {
         &self,
         range: impl RangeBounds<[&'a JsValue]>,
         limit: Option<u32>,
-    ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
         let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),

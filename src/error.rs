@@ -4,21 +4,15 @@ use web_sys::{
 };
 
 /// Type alias for convenience
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E> = std::result::Result<T, Error<E>>;
 
 /// Error type for all errors from this crate
 ///
-/// The `E` generic argument is used for when user-defined error types should
-/// be allowed, eg. when the user provides a callback.
-///
-/// Please do not rely on the fact that the default value is `void::Void`, as
-/// this will change in the future (to switch to `!`) without considering it
-/// as a semver breakage. If you need to refer to `Error<void::Void>`, then
-/// just refer to it as `Error`.
-// TODO: replace void::Void with `!` once `never_type` is stable
+/// The `E` generic argument is used for user-defined error types, eg. when
+/// the user provides a callback.
 #[derive(Clone, Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum Error<E = void::Void> {
+pub enum Error<E> {
     /// Not running in a browser window
     #[error("Not running in a browser window")]
     NotInBrowser,
@@ -88,8 +82,8 @@ pub enum Error<E = void::Void> {
     User(#[from] E),
 }
 
-impl Error {
-    pub(crate) fn from_dom_exception(err: DomException) -> Error {
+impl<Err> Error<Err> {
+    pub(crate) fn from_dom_exception(err: DomException) -> Error<Err> {
         match &err.name() as &str {
             "NotSupportedError" => crate::Error::OperationNotSupported,
             "NotAllowedError" => crate::Error::OperationNotAllowed,
@@ -98,14 +92,14 @@ impl Error {
         }
     }
 
-    pub(crate) fn from_js_value(v: JsValue) -> Error {
+    pub(crate) fn from_js_value(v: JsValue) -> Error<Err> {
         let err = v
             .dyn_into::<web_sys::DomException>()
             .expect("Trying to parse indexed_db::Error from value that is not a DomException");
         Error::from_dom_exception(err)
     }
 
-    pub(crate) fn from_js_event(evt: web_sys::Event) -> Error {
+    pub(crate) fn from_js_event(evt: web_sys::Event) -> Error<Err> {
         let idb_request = evt
             .target()
             .expect("Trying to parse indexed_db::Error from an event that has no target")
@@ -119,28 +113,6 @@ impl Error {
                 .expect("Failed to retrieve the error from the IDBRequest that called on_error")
                 .expect("IDBRequest::error did not return a DOMException"),
         )
-    }
-
-    pub(crate) fn into_user<E>(self) -> Error<E> {
-        match self {
-            Error::NotInBrowser => Error::NotInBrowser,
-            Error::IndexedDbDisabled => Error::IndexedDbDisabled,
-            Error::OperationNotSupported => Error::OperationNotSupported,
-            Error::OperationNotAllowed => Error::OperationNotAllowed,
-            Error::InvalidKey => Error::InvalidKey,
-            Error::VersionMustNotBeZero => Error::VersionMustNotBeZero,
-            Error::VersionTooOld => Error::VersionTooOld,
-            Error::InvalidCall => Error::InvalidCall,
-            Error::InvalidArgument => Error::InvalidArgument,
-            Error::AlreadyExists => Error::AlreadyExists,
-            Error::DoesNotExist => Error::DoesNotExist,
-            Error::DatabaseIsClosed => Error::DatabaseIsClosed,
-            Error::ObjectStoreWasRemoved => Error::ObjectStoreWasRemoved,
-            Error::ReadOnly => Error::ReadOnly,
-            Error::FailedClone => Error::FailedClone,
-            Error::InvalidRange => Error::InvalidRange,
-            Error::User(u) => match u {},
-        }
     }
 }
 

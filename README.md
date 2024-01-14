@@ -23,7 +23,9 @@ use web_sys::js_sys::JsString;
 
 async fn example() -> anyhow::Result<()> {
     // Obtain the database builder
-    let factory = Factory::get().context("opening IndexedDB")?;
+    // This database builder will let us easily use custom errors of type
+    // `std::io::Error`.
+    let factory = Factory::<std::io::Error>::get().context("opening IndexedDB")?;
 
     // Open the database, creating it if needed
     let db = factory
@@ -42,10 +44,7 @@ async fn example() -> anyhow::Result<()> {
             let store = t.object_store("store")?;
             store.add(&JsString::from("foo")).await?;
             store.add(&JsString::from("bar")).await?;
-            // The below type specification is due to us not having any
-            // user-defined error. In these circumstances, we need to
-            // explicitly indicate the error type to the Rust type checker.
-            Ok::<_, indexed_db::Error>(())
+            Ok(())
         })
         .await?;
 
@@ -59,8 +58,6 @@ async fn example() -> anyhow::Result<()> {
                     "Unexpected data length",
                 ))?;
             }
-            // Now that we return a custom error type above, we no longer need
-            // the explicit type specification
             Ok(())
         })
         .await?;
@@ -88,7 +85,7 @@ async fn example() -> anyhow::Result<()> {
         .run(|t| async move {
             let num_items = t.object_store("store")?.count().await?;
             assert_eq!(num_items, 2);
-            Ok::<_, indexed_db::Error>(())
+            Ok(())
         })
         .await?;
 

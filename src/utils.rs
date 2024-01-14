@@ -71,7 +71,6 @@ pub(crate) fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
         Some("ConstraintError") => crate::Error::AlreadyExists,
         _ => crate::Error::from_js_value(err),
     }
-    .into_user()
 }
 
 pub(crate) fn map_count_res(res: JsValue) -> usize {
@@ -94,7 +93,6 @@ pub(crate) fn map_count_err<Err>(err: JsValue) -> crate::Error<Err> {
         Some("DataError") => crate::Error::InvalidKey,
         _ => crate::Error::from_js_value(err),
     }
-    .into_user()
 }
 
 pub(crate) fn map_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
@@ -107,7 +105,6 @@ pub(crate) fn map_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
         Some("DataError") => crate::Error::InvalidKey,
         _ => crate::Error::from_js_value(err),
     }
-    .into_user()
 }
 
 pub(crate) fn map_get_err<Err>(err: JsValue) -> crate::Error<Err> {
@@ -119,7 +116,6 @@ pub(crate) fn map_get_err<Err>(err: JsValue) -> crate::Error<Err> {
         Some("DataError") => crate::Error::InvalidKey,
         _ => crate::Error::from_js_value(err),
     }
-    .into_user()
 }
 
 fn bound_map<T, U>(b: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
@@ -133,7 +129,7 @@ fn bound_map<T, U>(b: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
 
 pub(crate) fn make_key_range_from_slice<'a, Err>(
     range: impl RangeBounds<[&'a JsValue]>,
-) -> Result<JsValue, crate::Error<Err>> {
+) -> crate::Result<JsValue, Err> {
     let range: (Bound<JsValue>, Bound<JsValue>) = (
         bound_map(range.start_bound(), |s| slice_to_array(s).into()),
         bound_map(range.end_bound(), |s| slice_to_array(s).into()),
@@ -141,9 +137,7 @@ pub(crate) fn make_key_range_from_slice<'a, Err>(
     make_key_range(range)
 }
 
-pub(crate) fn make_key_range<Err>(
-    range: impl RangeBounds<JsValue>,
-) -> Result<JsValue, crate::Error<Err>> {
+pub(crate) fn make_key_range<Err>(range: impl RangeBounds<JsValue>) -> crate::Result<JsValue, Err> {
     match (range.start_bound(), range.end_bound()) {
         (Bound::Unbounded, Bound::Unbounded) => return Err(crate::Error::InvalidRange),
         (Bound::Unbounded, Bound::Included(b)) => IdbKeyRange::upper_bound_with_open(b, false),
@@ -164,11 +158,8 @@ pub(crate) fn make_key_range<Err>(
         }
     }
     .map(|k| k.into())
-    .map_err(|err| {
-        match error_name!(&err) {
-            Some("DataError") => crate::Error::InvalidKey,
-            _ => crate::Error::from_js_value(err),
-        }
-        .into_user()
+    .map_err(|err| match error_name!(&err) {
+        Some("DataError") => crate::Error::InvalidKey,
+        _ => crate::Error::from_js_value(err),
     })
 }

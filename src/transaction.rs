@@ -11,19 +11,21 @@ use web_sys::{
 };
 
 /// Helper to build a transaction
-pub struct TransactionBuilder {
+pub struct TransactionBuilder<Err> {
     db: IdbDatabase,
     stores: JsValue,
     mode: IdbTransactionMode,
+    _phantom: PhantomData<Err>,
     // TODO: add support for transaction durability when web-sys gets it
 }
 
-impl TransactionBuilder {
-    pub(crate) fn from_names(db: IdbDatabase, names: &[&str]) -> TransactionBuilder {
+impl<Err> TransactionBuilder<Err> {
+    pub(crate) fn from_names(db: IdbDatabase, names: &[&str]) -> TransactionBuilder<Err> {
         TransactionBuilder {
             db,
             stores: str_slice_to_array(names).into(),
             mode: IdbTransactionMode::Readonly,
+            _phantom: PhantomData,
         }
     }
 
@@ -50,25 +52,19 @@ impl TransactionBuilder {
     /// Note that transactions cannot be nested.
     ///
     /// Internally, this uses [`IDBDatabase::transaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/transaction).
-    pub async fn run<Fun, RetFut, Ret, Err>(
-        self,
-        transaction: Fun,
-    ) -> Result<Ret, crate::Error<Err>>
+    pub async fn run<Fun, RetFut, Ret>(self, transaction: Fun) -> crate::Result<Ret, Err>
     where
         Fun: FnOnce(Transaction<Err>) -> RetFut,
-        RetFut: Future<Output = Result<Ret, crate::Error<Err>>>,
+        RetFut: Future<Output = crate::Result<Ret, Err>>,
     {
         let t = self
             .db
             .transaction_with_str_sequence_and_mode(&self.stores, self.mode)
-            .map_err(|err| {
-                match error_name!(&err) {
-                    Some("InvalidStateError") => crate::Error::DatabaseIsClosed,
-                    Some("NotFoundError") => crate::Error::DoesNotExist,
-                    Some("InvalidAccessError") => crate::Error::InvalidArgument,
-                    _ => crate::Error::from_js_value(err),
-                }
-                .into_user()
+            .map_err(|err| match error_name!(&err) {
+                Some("InvalidStateError") => crate::Error::DatabaseIsClosed,
+                Some("NotFoundError") => crate::Error::DoesNotExist,
+                Some("InvalidAccessError") => crate::Error::InvalidArgument,
+                _ => crate::Error::from_js_value(err),
             })?;
         let fut = transaction(Transaction::from_sys(t.clone()));
         TransactionPoller {
@@ -84,9 +80,7 @@ thread_local! {
     static PENDING_REQUESTS: Cell<Option<usize>> = Cell::new(None);
 }
 
-pub(crate) async fn transaction_request<Err>(
-    req: IdbRequest,
-) -> Result<JsValue, crate::Error<Err>> {
+pub(crate) async fn transaction_request<Err>(req: IdbRequest) -> crate::Result<JsValue, Err> {
     let (success_tx, success_rx) = oneshot::channel();
     let (error_tx, error_rx) = oneshot::channel();
 
@@ -119,9 +113,8 @@ pub(crate) async fn transaction_request<Err>(
         ))
     });
 
-    res.map_err(|err| crate::Error::from_js_event(err).into_user())
-        .map(|evt| {
-            evt.target()
+    res.map_err(crate::Error::from_js_event).map(|evt| {
+        evt.target()
             .expect("Trying to parse indexed_db::Error from an event that has no target")
             .dyn_into::<web_sys::IdbRequest>()
             .expect(
@@ -129,7 +122,7 @@ pub(crate) async fn transaction_request<Err>(
             )
             .result()
             .expect("Failed retrieving the result of successful IDBRequest")
-        })
+    })
 }
 
 /// Wrapper for [`IDBTransaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
@@ -149,14 +142,11 @@ impl<Err> Transaction<Err> {
     /// Returns an [`ObjectStore`] that can be used to operate on data in this transaction
     ///
     /// Internally, this uses [`IDBTransaction::object_store`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction/objectStore).
-    pub fn object_store(&self, name: &str) -> Result<ObjectStore<Err>, crate::Error<Err>> {
+    pub fn object_store(&self, name: &str) -> crate::Result<ObjectStore<Err>, Err> {
         Ok(ObjectStore::from_sys(self.sys.object_store(name).map_err(
-            |err| {
-                match error_name!(&err) {
-                    Some("NotFoundError") => crate::Error::DoesNotExist,
-                    _ => crate::Error::from_js_value(err),
-                }
-                .into_user()
+            |err| match error_name!(&err) {
+                Some("NotFoundError") => crate::Error::DoesNotExist,
+                _ => crate::Error::from_js_value(err),
             },
         )?))
     }
@@ -173,9 +163,9 @@ pin_project_lite::pin_project! {
 
 impl<Ret, Err, F> Future for TransactionPoller<F>
 where
-    F: Future<Output = Result<Ret, crate::Error<Err>>>,
+    F: Future<Output = crate::Result<Ret, Err>>,
 {
-    type Output = Result<Ret, crate::Error<Err>>;
+    type Output = crate::Result<Ret, Err>;
     fn poll(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         if PENDING_REQUESTS
