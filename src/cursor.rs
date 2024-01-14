@@ -1,9 +1,14 @@
-use crate::utils::map_cursor_advance_err;
+use crate::utils::{map_cursor_advance_err, map_cursor_advance_until_err};
 use std::marker::PhantomData;
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
     IdbCursorDirection, IdbCursorWithValue,
 };
+
+#[cfg(doc)]
+use crate::Index;
+#[cfg(doc)]
+use web_sys::js_sys::Array;
 
 /// The direction for a cursor
 pub enum CursorDirection {
@@ -72,6 +77,18 @@ impl<Err> Cursor<Err> {
     /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
     pub fn advance(&self, count: u32) -> crate::Result<(), Err> {
         self.sys.advance(count).map_err(map_cursor_advance_err)
+    }
+
+    /// Advance this [`Cursor`] until the provided key
+    ///
+    /// Note that if this [`Cursor`] was built from an [`Index`], then you need to
+    /// encode the [`Array`] yourself.
+    ///
+    /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
+    pub fn advance_until(&self, key: &JsValue) -> crate::Result<(), Err> {
+        self.sys
+            .continue_with_key(key)
+            .map_err(map_cursor_advance_until_err)
     }
 }
 

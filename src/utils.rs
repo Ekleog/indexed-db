@@ -133,8 +133,19 @@ pub(crate) fn map_cursor_advance_err<Err>(err: JsValue) -> crate::Error<Err> {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::CursorCompleted,
         Some("TransactionInactiveError") => {
-            panic!("Tried opening a Cursor on an ObjectStore while the transaction was inactive")
+            panic!("Tried advancing a Cursor on an ObjectStore while the transaction was inactive")
         }
+        _ => crate::Error::from_js_value(err),
+    }
+}
+
+pub(crate) fn map_cursor_advance_until_err<Err>(err: JsValue) -> crate::Error<Err> {
+    match error_name!(&err) {
+        Some("InvalidStateError") => crate::Error::CursorCompleted,
+        Some("TransactionInactiveError") => {
+            panic!("Tried advancing a Cursor on an ObjectStore while the transaction was inactive")
+        }
+        Some("DataError") => crate::Error::InvalidKey,
         _ => crate::Error::from_js_value(err),
     }
 }
