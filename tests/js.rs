@@ -142,6 +142,10 @@ async fn smoke_test() {
                     .unwrap(),
                 **JsString::from("value")
             );
+            assert_eq!(
+                objects.get_all(None).await?,
+                vec![(**JsString::from("value")).clone()],
+            );
 
             Ok::<_, indexed_db::Error<()>>(())
         })

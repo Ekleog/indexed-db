@@ -6,7 +6,7 @@ use std::{
     ops::{Bound, RangeBounds},
 };
 use web_sys::{
-    js_sys::Number,
+    js_sys::{Array, Number},
     wasm_bindgen::{JsCast, JsValue},
     IdbKeyRange, IdbObjectStore,
 };
@@ -188,6 +188,27 @@ impl<Err> ObjectStore<Err> {
             Err(e) => Either::Left(std::future::ready(Err(map_get_err(e)))),
         }
     }
+
+    /// Get all the objects in the store, with a maximum number of results of `limit`
+    ///
+    /// Internally, this uses [`IDBObjectStore::getAll`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/getAll).
+    pub fn get_all(
+        &self,
+        limit: Option<u32>,
+    ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
+        let get_req = match limit {
+            None => self.sys.get_all(),
+            Some(limit) => self
+                .sys
+                .get_all_with_key_and_limit(&JsValue::UNDEFINED, limit),
+        };
+        match get_req {
+            Ok(get_req) => {
+                Either::Right(transaction_request(get_req).map(|res| res.map(array_to_vec)))
+            }
+            Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
+        }
+    }
 }
 
 fn none_if_undefined(v: JsValue) -> Option<JsValue> {
@@ -196,6 +217,18 @@ fn none_if_undefined(v: JsValue) -> Option<JsValue> {
     } else {
         Some(v)
     }
+}
+
+fn array_to_vec(v: JsValue) -> Vec<JsValue> {
+    let array = v
+        .dyn_into::<Array>()
+        .expect("Value was not of the expected Array type");
+    let len = array.length();
+    let mut res = Vec::with_capacity(usize::try_from(len).unwrap());
+    for i in 0..len {
+        res.push(array.get(i));
+    }
+    res
 }
 
 fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
