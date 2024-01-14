@@ -2,7 +2,8 @@ use crate::{
     transaction::transaction_request,
     utils::{
         map_cursor_advance_err, map_cursor_advance_until_err,
-        map_cursor_advance_until_primary_key_err, map_cursor_delete_err, slice_to_array,
+        map_cursor_advance_until_primary_key_err, map_cursor_delete_err, map_cursor_update_err,
+        slice_to_array,
     },
 };
 use std::marker::PhantomData;
@@ -151,11 +152,25 @@ impl<Err> Cursor<Err> {
     /// Note that this method does not work on key-only cursors over indexes.
     ///
     /// Internally, this uses [`IDBCursor::delete`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/delete).
-    pub async fn delete(&mut self) -> crate::Result<(), Err> {
+    pub async fn delete(&self) -> crate::Result<(), Err> {
         let Some(sys) = &self.sys else {
             return Err(crate::Error::CursorCompleted);
         };
         let req = sys.delete().map_err(map_cursor_delete_err)?;
+        transaction_request(req).await?;
+        Ok(())
+    }
+
+    /// Update the value currently pointed by this [`Cursor`] to `value`
+    ///
+    /// Note that this method does not work on key-only cursors over indexes.
+    ///
+    /// Internally, this uses [`IDBCursor::update`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/update).
+    pub async fn update(&self, value: &JsValue) -> crate::Result<(), Err> {
+        let Some(sys) = &self.sys else {
+            return Err(crate::Error::CursorCompleted);
+        };
+        let req = sys.update(value).map_err(map_cursor_update_err)?;
         transaction_request(req).await?;
         Ok(())
     }

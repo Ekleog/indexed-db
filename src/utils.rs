@@ -174,6 +174,19 @@ pub(crate) fn map_cursor_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
+pub(crate) fn map_cursor_update_err<Err>(err: JsValue) -> crate::Error<Err> {
+    match error_name!(&err) {
+        Some("InvalidStateError") => crate::Error::CursorCompleted,
+        Some("TransactionInactiveError") => {
+            panic!("Tried advancing a Cursor on an ObjectStore while the transaction was inactive")
+        }
+        Some("ReadOnlyError") => crate::Error::ReadOnly,
+        Some("DataError") => crate::Error::InvalidKey,
+        Some("DataCloneError") => crate::Error::FailedClone,
+        _ => crate::Error::from_js_value(err),
+    }
+}
+
 fn bound_map<T, U>(b: Bound<T>, f: impl FnOnce(T) -> U) -> Bound<U> {
     // TODO: replace with Bound::map once https://github.com/rust-lang/rust/issues/86026 is stable
     match b {

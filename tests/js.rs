@@ -197,6 +197,7 @@ async fn smoke_test() {
             let mut cursor = stuffs.cursor().open().await.unwrap();
             while let Some(val) = cursor.value() {
                 all.push(val);
+                cursor.delete().await.unwrap();
                 cursor.advance(1).await.unwrap();
             }
             assert_eq!(
@@ -207,6 +208,7 @@ async fn smoke_test() {
                     (**JsString::from("value1")).clone()
                 ]
             );
+            assert_eq!(stuffs.count().await.unwrap(), 0);
 
             Ok(())
         })
