@@ -13,7 +13,7 @@ async fn smoke_test() {
     std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     // Factory::get
-    let factory = Factory::get().unwrap();
+    let factory = Factory::<()>::get().unwrap();
 
     // Factory::cmp
     assert_eq!(
@@ -96,7 +96,7 @@ async fn smoke_test() {
             assert_eq!(objects.count().await?, 1);
             assert!(objects.contains(&JsString::from("key")).await?);
 
-            Ok::<_, indexed_db::Error<()>>(())
+            Ok(())
         })
         .await
         .unwrap();
@@ -126,7 +126,7 @@ async fn smoke_test() {
             stuffs.delete(&Number::from(1)).await?;
             assert_eq!(stuffs.count().await?, 0);
 
-            Ok::<_, indexed_db::Error<()>>(())
+            Ok(())
         })
         .await
         .unwrap();
@@ -162,7 +162,7 @@ async fn smoke_test() {
                 Vec::<JsValue>::new(),
             );
 
-            Ok::<_, indexed_db::Error<()>>(())
+            Ok(())
         })
         .await
         .unwrap();
@@ -192,7 +192,23 @@ async fn smoke_test() {
                 ]
             );
 
-            Ok::<_, indexed_db::Error<()>>(())
+            // Cursors
+            let mut all = Vec::new();
+            let mut cursor = stuffs.cursor().open().await.unwrap();
+            while let Some(val) = cursor.value() {
+                all.push(val);
+                cursor.advance(1).await.unwrap();
+            }
+            assert_eq!(
+                all,
+                vec![
+                    (**JsString::from("value3")).clone(),
+                    (**JsString::from("value2")).clone(),
+                    (**JsString::from("value1")).clone()
+                ]
+            );
+
+            Ok(())
         })
         .await
         .unwrap();

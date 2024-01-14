@@ -41,17 +41,19 @@ impl CursorDirection {
 
 /// Wrapper for [`IDBCursorWithValue`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursorWithValue)
 pub struct Cursor<Err> {
-    sys: IdbCursorWithValue,
+    sys: Option<IdbCursorWithValue>,
     req: IdbRequest,
     _phantom: PhantomData<Err>,
 }
 
 impl<Err> Cursor<Err> {
     pub(crate) async fn from(req: IdbRequest) -> crate::Result<Cursor<Err>, Err> {
-        let sys = transaction_request(req.clone())
-            .await?
-            .dyn_into::<IdbCursorWithValue>()
-            .expect("Cursor-returning request did not return an IDBCursorWithValue");
+        let res = transaction_request(req.clone()).await?;
+        let is_already_over = res.is_null();
+        let sys = (!is_already_over).then(|| {
+            res.dyn_into::<IdbCursorWithValue>()
+                .expect("Cursor-returning request did not return an IDBCursorWithValue")
+        });
         Ok(Cursor {
             sys,
             req,
@@ -62,19 +64,21 @@ impl<Err> Cursor<Err> {
     /// Retrieve the value this [`Cursor`] is currently pointing at
     ///
     /// Internally, this uses the [`IDBCursorWithValue::value`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursorWithValue/value) property.
-    pub fn value(&self) -> JsValue {
-        self.sys
-            .value()
-            .expect("Failed retrieving value from known-good cursor")
+    pub fn value(&self) -> Option<JsValue> {
+        self.sys.as_ref().map(|sys| {
+            sys.value()
+                .expect("Failed retrieving value from known-good cursor")
+        })
     }
 
     /// Retrieve the key this [`Cursor`] is currently pointing at
     ///
     /// Internally, this uses the [`IDBCursor::key`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/key) property.
-    pub fn key(&self) -> JsValue {
-        self.sys
-            .key()
-            .expect("Failed retrieving key from known-good cursor")
+    pub fn key(&self) -> Option<JsValue> {
+        self.sys.as_ref().map(|sys| {
+            sys.key()
+                .expect("Failed retrieving key from known-good cursor")
+        })
     }
 
     /// Advance this [`Cursor`] by `count` elements
@@ -82,8 +86,14 @@ impl<Err> Cursor<Err> {
     /// Panics if `count` is `0`.
     ///
     /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
-    pub fn advance(&self, count: u32) -> crate::Result<(), Err> {
-        self.sys.advance(count).map_err(map_cursor_advance_err)
+    pub async fn advance(&mut self, count: u32) -> crate::Result<(), Err> {
+        if let Some(sys) = &self.sys {
+            sys.advance(count).map_err(map_cursor_advance_err)?;
+            if transaction_request(self.req.clone()).await?.is_null() {
+                self.sys = None;
+            }
+        }
+        Ok(())
     }
 
     /// Advance this [`Cursor`] until the provided key
@@ -92,10 +102,15 @@ impl<Err> Cursor<Err> {
     /// encode the [`Array`] yourself.
     ///
     /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
-    pub fn advance_until(&self, key: &JsValue) -> crate::Result<(), Err> {
-        self.sys
-            .continue_with_key(key)
-            .map_err(map_cursor_advance_until_err)
+    pub async fn advance_until(&mut self, key: &JsValue) -> crate::Result<(), Err> {
+        if let Some(sys) = &self.sys {
+            sys.continue_with_key(key)
+                .map_err(map_cursor_advance_until_err)?;
+            if transaction_request(self.req.clone()).await?.is_null() {
+                self.sys = None;
+            }
+        }
+        Ok(())
     }
 }
 
