@@ -126,17 +126,22 @@ pub(crate) async fn transaction_request<Err>(req: IdbRequest) -> crate::Result<J
 }
 
 /// Wrapper for [`IDBTransaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
+#[derive(Debug)]
 pub struct Transaction<Err> {
     sys: IdbTransaction,
     _phantom: PhantomData<Err>,
 }
 
 impl<Err> Transaction<Err> {
-    fn from_sys(sys: IdbTransaction) -> Transaction<Err> {
+    pub(crate) fn from_sys(sys: IdbTransaction) -> Transaction<Err> {
         Transaction {
             sys,
             _phantom: PhantomData,
         }
+    }
+
+    pub(crate) fn as_sys(&self) -> &IdbTransaction {
+        &self.sys
     }
 
     /// Returns an [`ObjectStore`] that can be used to operate on data in this transaction
@@ -153,11 +158,11 @@ impl<Err> Transaction<Err> {
 }
 
 pin_project_lite::pin_project! {
-    struct TransactionPoller<F> {
+    pub(crate) struct TransactionPoller<F> {
         #[pin]
-        fut: F,
-        transaction: IdbTransaction,
-        pending_requests: usize,
+        pub(crate) fut: F,
+        pub(crate) transaction: IdbTransaction,
+        pub(crate) pending_requests: usize,
     }
 }
 

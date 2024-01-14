@@ -33,7 +33,11 @@ async fn example() -> anyhow::Result<()> {
     let db = factory
         .open("database", 1, |evt| async move {
             let db = evt.database();
-            db.build_object_store("store").auto_increment().create()?;
+            let store = db.build_object_store("store").auto_increment().create()?;
+
+            // You can also add objects from this callback
+            store.add(&JsString::from("foo")).await?;
+
             Ok(())
         })
         .await
@@ -44,8 +48,8 @@ async fn example() -> anyhow::Result<()> {
         .rw()
         .run(|t| async move {
             let store = t.object_store("store")?;
-            store.add(&JsString::from("foo")).await?;
             store.add(&JsString::from("bar")).await?;
+            store.add(&JsString::from("baz")).await?;
             Ok(())
         })
         .await?;
@@ -69,9 +73,9 @@ async fn example() -> anyhow::Result<()> {
         .rw()
         .run(|t| async move {
             let store = t.object_store("store")?;
-            store.add(&JsString::from("baz")).await?;
-            if store.count().await? > 2 {
-                // Oops! In this example, we have 3 items by this point
+            store.add(&JsString::from("quux")).await?;
+            if store.count().await? > 3 {
+                // Oops! In this example, we have 4 items by this point
                 Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "Too many objects in store",
@@ -86,7 +90,7 @@ async fn example() -> anyhow::Result<()> {
     db.transaction(&["store"])
         .run(|t| async move {
             let num_items = t.object_store("store")?.count().await?;
-            assert_eq!(num_items, 2);
+            assert_eq!(num_items, 3);
             Ok(())
         })
         .await?;

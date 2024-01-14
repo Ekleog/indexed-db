@@ -1,4 +1,4 @@
-use crate::{utils::generic_request, Database};
+use crate::{transaction::TransactionPoller, utils::generic_request, Database, Transaction};
 use futures_channel::oneshot;
 use futures_util::{
     future::{self, Either},
@@ -127,7 +127,14 @@ impl<Err: 'static> Factory<Err> {
                 completion?;
             }
             Either::Left((evt, completion_fut)) => {
-                on_upgrade_needed(evt.expect("Closure dropped before its end of scope")).await?;
+                let evt = evt.expect("Closure dropped before its end of scope");
+                let transaction = evt.transaction().as_sys().clone();
+                TransactionPoller {
+                    fut: on_upgrade_needed(evt),
+                    transaction,
+                    pending_requests: 0,
+                }
+                .await?;
                 completion_fut.await?;
             }
         }
@@ -147,21 +154,31 @@ impl<Err: 'static> Factory<Err> {
 pub struct VersionChangeEvent<Err> {
     sys: IdbVersionChangeEvent,
     db: Database<Err>,
+    transaction: Transaction<Err>,
 }
 
 impl<Err> VersionChangeEvent<Err> {
     fn from_sys(sys: IdbVersionChangeEvent) -> VersionChangeEvent<Err> {
-        let db_sys = sys
+        let db_req = sys
             .target()
             .expect("IDBVersionChangeEvent had no target")
             .dyn_into::<IdbOpenDbRequest>()
-            .expect("IDBVersionChangeEvent target was not an IDBOpenDBRequest")
+            .expect("IDBVersionChangeEvent target was not an IDBOpenDBRequest");
+        let db_sys = db_req
             .result()
             .expect("IDBOpenDBRequest had no result in its on_upgrade_needed handler")
             .dyn_into::<IdbDatabase>()
             .expect("IDBOpenDBRequest result was not an IDBDatabase");
+        let transaction_sys = db_req
+            .transaction()
+            .expect("IDBOpenDBRequest had no associated transaction");
         let db = Database::from_sys(db_sys);
-        VersionChangeEvent { sys, db }
+        let transaction = Transaction::from_sys(transaction_sys);
+        VersionChangeEvent {
+            sys,
+            db,
+            transaction,
+        }
     }
 
     /// The version before the database upgrade, clamped to `u32::MAX`
@@ -183,5 +200,12 @@ impl<Err> VersionChangeEvent<Err> {
     /// The database under creation
     pub fn database(&self) -> &Database<Err> {
         &self.db
+    }
+
+    /// The `versionchange` transaction that triggered this event
+    ///
+    /// This transaction can be used to submit further requests.
+    pub fn transaction(&self) -> &Transaction<Err> {
+        &self.transaction
     }
 }

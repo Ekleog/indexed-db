@@ -34,3 +34,23 @@ async fn other_awaits_panic() {
 
     tx.send(()).unwrap();
 }
+
+#[wasm_bindgen_test]
+#[should_panic(expected = "Transaction blocked without any request under way")]
+async fn await_in_versionchange_panics() {
+    let factory = Factory::<anyhow::Error>::get().unwrap();
+
+    let (tx, rx) = futures_channel::oneshot::channel();
+
+    factory
+        .open("baz", 1, |evt| async move {
+            let db = evt.database();
+            db.build_object_store("data").auto_increment().create()?;
+            rx.await.context("awaiting for something external")?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    tx.send(()).unwrap();
+}
