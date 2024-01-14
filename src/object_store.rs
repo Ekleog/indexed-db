@@ -454,9 +454,7 @@ impl<Err> CursorBuilder<Err> {
             .store
             .open_cursor_with_range_and_direction(&self.query, self.direction)
         {
-            Ok(open_req) => {
-                Either::Right(transaction_request(open_req).map(|res| res.map(Cursor::from)))
-            }
+            Ok(open_req) => Either::Right(Cursor::from(open_req)),
             Err(err) => Either::Left(std::future::ready(Err(map_open_cursor_err(err)))),
         }
     }

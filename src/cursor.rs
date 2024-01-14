@@ -1,8 +1,11 @@
-use crate::utils::{map_cursor_advance_err, map_cursor_advance_until_err};
+use crate::{
+    transaction::transaction_request,
+    utils::{map_cursor_advance_err, map_cursor_advance_until_err},
+};
 use std::marker::PhantomData;
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
-    IdbCursorDirection, IdbCursorWithValue,
+    IdbCursorDirection, IdbCursorWithValue, IdbRequest,
 };
 
 #[cfg(doc)]
@@ -39,17 +42,21 @@ impl CursorDirection {
 /// Wrapper for [`IDBCursorWithValue`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursorWithValue)
 pub struct Cursor<Err> {
     sys: IdbCursorWithValue,
+    req: IdbRequest,
     _phantom: PhantomData<Err>,
 }
 
 impl<Err> Cursor<Err> {
-    pub(crate) fn from(value: JsValue) -> Cursor<Err> {
-        Cursor {
-            sys: value
-                .dyn_into::<IdbCursorWithValue>()
-                .expect("Cursor-returning function did not return an IDBCursorWithValue"),
+    pub(crate) async fn from(req: IdbRequest) -> crate::Result<Cursor<Err>, Err> {
+        let sys = transaction_request(req.clone())
+            .await?
+            .dyn_into::<IdbCursorWithValue>()
+            .expect("Cursor-returning request did not return an IDBCursorWithValue");
+        Ok(Cursor {
+            sys,
+            req,
             _phantom: PhantomData,
-        }
+        })
     }
 
     /// Retrieve the value this [`Cursor`] is currently pointing at
