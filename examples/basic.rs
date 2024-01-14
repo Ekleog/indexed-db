@@ -31,7 +31,6 @@ async fn example() -> anyhow::Result<()> {
 
     // In another transaction, read the first record
     db.transaction(&["store"])
-        .rw()
         .run(|t| async move {
             let data = t.object_store("store")?.get_all(Some(1)).await?;
             if data.len() != 1 {
@@ -66,7 +65,6 @@ async fn example() -> anyhow::Result<()> {
 
     // And no write will have happened
     db.transaction(&["store"])
-        .rw()
         .run(|t| async move {
             let num_items = t.object_store("store")?.count().await?;
             assert_eq!(num_items, 2);
