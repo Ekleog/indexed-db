@@ -1,5 +1,6 @@
 use anyhow::Context;
-use indexed_db::*;
+use indexed_db::Factory;
+use web_sys::js_sys::JsString;
 
 async fn example() -> anyhow::Result<()> {
     // Obtain the database builder
@@ -76,7 +77,6 @@ async fn example() -> anyhow::Result<()> {
 }
 
 use wasm_bindgen_test::*;
-use web_sys::js_sys::JsString;
 wasm_bindgen_test_configure!(run_in_browser);
 #[wasm_bindgen_test]
 async fn test() {

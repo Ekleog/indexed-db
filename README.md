@@ -18,7 +18,8 @@ However, in order to make transactions easy to write, the callback that you need
 
 ```rust
 use anyhow::Context;
-use indexed_db::*;
+use indexed_db::Factory;
+use web_sys::js_sys::JsString;
 
 async fn example() -> anyhow::Result<()> {
     // Obtain the database builder
