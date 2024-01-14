@@ -1,14 +1,17 @@
 use crate::{
+    cursor::CursorDirection,
     transaction::transaction_request,
     utils::{
         array_to_vec, make_key_range, map_add_err, map_count_err, map_count_res, map_delete_err,
-        map_get_err, none_if_undefined, str_slice_to_array,
+        map_get_err, map_open_cursor_err, none_if_undefined, str_slice_to_array,
     },
-    Index,
+    Cursor, Index,
 };
 use futures_util::future::{Either, FutureExt};
 use std::{future::Future, marker::PhantomData, ops::RangeBounds};
-use web_sys::{js_sys::Array, wasm_bindgen::JsValue, IdbIndexParameters, IdbObjectStore};
+use web_sys::{
+    js_sys::Array, wasm_bindgen::JsValue, IdbCursorDirection, IdbIndexParameters, IdbObjectStore,
+};
 
 /// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
 /// for use in transactions
@@ -372,10 +375,13 @@ impl<Err> ObjectStore<Err> {
         )?))
     }
 
-    // TODO: implement `openCursor`
-    // TODO: implement `openKeyCursor`
+    /// Open a [`Cursor`] on this object store
+    pub fn cursor(&self) -> CursorBuilder<Err> {
+        CursorBuilder::from(self.sys.clone())
+    }
 }
 
+/// Helper to build indexes over an [`ObjectStore`]
 pub struct IndexBuilder<'a, Err> {
     store: IdbObjectStore,
     name: &'a str,
@@ -418,6 +424,57 @@ impl<'a, Err> IndexBuilder<'a, Err> {
     /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex#multientry).
     pub fn multi_entry(mut self) -> Self {
         self.options.multi_entry(true);
+        self
+    }
+}
+
+/// Helper to build cursors over [`ObjectStore`]s
+pub struct CursorBuilder<Err> {
+    store: IdbObjectStore,
+    query: JsValue,
+    direction: IdbCursorDirection,
+    _phantom: PhantomData<Err>,
+}
+
+impl<Err> CursorBuilder<Err> {
+    pub(crate) fn from(store: IdbObjectStore) -> CursorBuilder<Err> {
+        CursorBuilder {
+            store,
+            query: JsValue::UNDEFINED,
+            direction: IdbCursorDirection::Next,
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Open the cursor
+    ///
+    /// Internally, this uses [`IDBObjectStore::openCursor`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/openCursor).
+    pub fn open(self) -> impl Future<Output = crate::Result<Cursor<Err>, Err>> {
+        match self
+            .store
+            .open_cursor_with_range_and_direction(&self.query, self.direction)
+        {
+            Ok(open_req) => {
+                Either::Right(transaction_request(open_req).map(|res| res.map(Cursor::from)))
+            }
+            Err(err) => Either::Left(std::future::ready(Err(map_open_cursor_err(err)))),
+        }
+    }
+    // TODO: implement `open_key`
+
+    /// Limit the range of the cursor
+    ///
+    /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/openCursor#range).
+    pub fn range(mut self, range: impl RangeBounds<JsValue>) -> crate::Result<Self, Err> {
+        self.query = make_key_range(range)?;
+        Ok(self)
+    }
+
+    /// Define the direction of the cursor
+    ///
+    /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/openCursor#direction).
+    pub fn direction(mut self, direction: CursorDirection) -> Self {
+        self.direction = direction.to_sys();
         self
     }
 }

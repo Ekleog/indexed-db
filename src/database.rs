@@ -1,4 +1,4 @@
-use crate::{utils::str_slice_to_array, ObjectStore, TransactionBuilder};
+use crate::{transaction::TransactionBuilder, utils::str_slice_to_array, ObjectStore};
 use std::marker::PhantomData;
 use web_sys::{IdbDatabase, IdbObjectStoreParameters};
 
