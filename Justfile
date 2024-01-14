@@ -1,3 +1,11 @@
+all: fmt doc test
+
+fmt:
+    cargo fmt
+
+doc:
+    cargo doc --target wasm32-unknown-unknown
+
 test: test-crate run-example
 
 test-crate:
