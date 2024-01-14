@@ -209,6 +209,30 @@ impl<Err> ObjectStore<Err> {
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }
+
+    /// Get all the objects with a key in the provided range, with a maximum number of results of `limit`
+    ///
+    /// Internally, this uses [`IDBObjectStore::getAll`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/getAll).
+    pub fn get_all_in(
+        &self,
+        range: impl RangeBounds<JsValue>,
+        limit: Option<u32>,
+    ) -> impl Future<Output = Result<Vec<JsValue>, crate::Error<Err>>> {
+        let range = match make_key_range(range) {
+            Ok(range) => range,
+            Err(e) => return Either::Left(std::future::ready(Err(e))),
+        };
+        let get_req = match limit {
+            None => self.sys.get_all_with_key(&range),
+            Some(limit) => self.sys.get_all_with_key_and_limit(&range, limit),
+        };
+        match get_req {
+            Ok(get_req) => {
+                Either::Right(transaction_request(get_req).map(|res| res.map(array_to_vec)))
+            }
+            Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
+        }
+    }
 }
 
 fn none_if_undefined(v: JsValue) -> Option<JsValue> {

@@ -146,6 +146,12 @@ async fn smoke_test() {
                 objects.get_all(None).await?,
                 vec![(**JsString::from("value")).clone()],
             );
+            assert_eq!(
+                objects
+                    .get_all_in(JsString::from("zzz").as_ref().., None)
+                    .await?,
+                Vec::<JsValue>::new(),
+            );
 
             Ok::<_, indexed_db::Error<()>>(())
         })
