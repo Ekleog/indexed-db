@@ -29,6 +29,8 @@ impl<Err> ObjectStore<Err> {
 
     /// Add the value `val` to this object store, and return its auto-computed key
     ///
+    /// This will error if the key already existed.
+    ///
     /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
     pub fn add(&self, value: &JsValue) -> impl Future<Output = Result<JsValue, crate::Error<Err>>> {
         match self.sys.add(value) {
@@ -39,6 +41,8 @@ impl<Err> ObjectStore<Err> {
 
     /// Add the value `val` to this object store, with key `key`
     ///
+    /// This will error if the key already existed.
+    ///
     /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
     pub fn add_kv(
         &self,
@@ -46,6 +50,36 @@ impl<Err> ObjectStore<Err> {
         value: &JsValue,
     ) -> impl Future<Output = Result<(), crate::Error<Err>>> {
         match self.sys.add_with_key(value, key) {
+            Ok(add_req) => {
+                Either::Left(transaction_request::<Err>(add_req).map(|res| res.map(|_| ())))
+            }
+            Err(e) => Either::Right(std::future::ready(Err(map_add_err(e)))),
+        }
+    }
+
+    /// Sets the value `val` to this object store, and return its auto-computed key
+    ///
+    /// This will overwrite the previous value if the key already existed.
+    ///
+    /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
+    pub fn put(&self, value: &JsValue) -> impl Future<Output = Result<JsValue, crate::Error<Err>>> {
+        match self.sys.put(value) {
+            Ok(add_req) => Either::Left(transaction_request::<Err>(add_req)),
+            Err(e) => Either::Right(std::future::ready(Err(map_add_err(e)))),
+        }
+    }
+
+    /// Add the value `val` to this object store, with key `key`
+    ///
+    /// This will overwrite the previous value if the key already existed.
+    ///
+    /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
+    pub fn put_kv(
+        &self,
+        key: &JsValue,
+        value: &JsValue,
+    ) -> impl Future<Output = Result<(), crate::Error<Err>>> {
+        match self.sys.put_with_key(value, key) {
             Ok(add_req) => {
                 Either::Left(transaction_request::<Err>(add_req).map(|res| res.map(|_| ())))
             }
@@ -297,6 +331,10 @@ impl<Err> ObjectStore<Err> {
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }
+
+    // TODO: implement `index`
+    // TODO: implement `openCursor`
+    // TODO: implement `openKeyCursor`
 }
 
 fn none_if_undefined(v: JsValue) -> Option<JsValue> {
