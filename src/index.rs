@@ -1,8 +1,8 @@
 use crate::{
     transaction::transaction_request,
     utils::{
-        array_to_vec, make_key_range, make_key_range_from_slice, map_count_err, map_count_res,
-        map_get_err, none_if_undefined, slice_to_array,
+        array_to_vec, make_key_range_from_slice, map_count_err, map_count_res, map_get_err,
+        none_if_undefined, slice_to_array,
     },
 };
 use futures_util::future::{Either, FutureExt};
@@ -24,14 +24,26 @@ impl<Err> Index<Err> {
         }
     }
 
+    /// Checks whether the provided key (for this index) already exists
+    ///
+    /// Internally, this uses [`IDBIndex::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/count).
+    pub fn contains(&self, key: &[&JsValue]) -> impl Future<Output = crate::Result<bool, Err>> {
+        match self.sys.count_with_key(&slice_to_array(key)) {
+            Ok(count_req) => Either::Right(
+                transaction_request(count_req).map(|res| res.map(map_count_res).map(|n| n != 0)),
+            ),
+            Err(e) => Either::Left(std::future::ready(Err(map_count_err(e)))),
+        }
+    }
+
     /// Count all the keys (for this index) in the provided range
     ///
     /// Internally, this uses [`IDBIndex::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/count).
-    pub fn count_in(
+    pub fn count_in<'a>(
         &self,
-        range: impl RangeBounds<JsValue>,
+        range: impl RangeBounds<[&'a JsValue]>,
     ) -> impl Future<Output = crate::Result<usize, Err>> {
-        let range = match make_key_range(range) {
+        let range = match make_key_range_from_slice(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
