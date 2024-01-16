@@ -34,6 +34,11 @@ impl<Err> ObjectStore<Err> {
     /// Note that this method can only be called from within an `on_upgrade_needed` callback. It returns
     /// a builder, and calling the `create` method on this builder will perform the actual creation.
     ///
+    /// Interesting points about indices:
+    /// - It is not possible to index `bool` in IndexedDB.
+    /// - If your index uses a column that does not exist, then the object will not be recorded in the index.
+    ///   This is useful for unique compound indices, usually when you'd have indexed a `bool` column otherwise.
+    ///
     /// Internally, this uses [`IDBObjectStore::createIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex).
     pub fn build_index<'a>(&self, name: &'a str, key_path: &[&str]) -> IndexBuilder<'a, Err> {
         IndexBuilder {
