@@ -50,10 +50,10 @@ async fn smoke_test() {
             let db = evt.database();
             db.build_object_store("objects").create()?;
             db.build_object_store("things")
-                .key_path(&["foo", "bar"])
+                .compound_key_path(&["foo", "bar"])
                 .create()?;
             let stuffs = db.build_object_store("stuffs").auto_increment().create()?;
-            stuffs.build_index("contents", &[""]).create()?;
+            stuffs.build_index("contents", "").create()?;
             Ok(())
         })
         .await

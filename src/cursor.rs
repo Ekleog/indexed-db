@@ -3,7 +3,6 @@ use crate::{
     utils::{
         map_cursor_advance_err, map_cursor_advance_until_err,
         map_cursor_advance_until_primary_key_err, map_cursor_delete_err, map_cursor_update_err,
-        slice_to_array,
     },
 };
 use std::marker::PhantomData;
@@ -105,9 +104,6 @@ impl<Err> Cursor<Err> {
 
     /// Advance this [`Cursor`] until the provided key
     ///
-    /// Note that if this [`Cursor`] was built from an [`Index`], then you need to
-    /// encode the [`Array`] yourself.
-    ///
     /// Internally, this uses [`IDBCursor::continue`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/continue).
     pub async fn advance_until(&mut self, key: &JsValue) -> crate::Result<(), Err> {
         let Some(sys) = &self.sys else {
@@ -133,13 +129,13 @@ impl<Err> Cursor<Err> {
     /// Internally, this uses [`IDBCursor::continuePrimaryKey`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/continuePrimaryKey).
     pub async fn advance_until_primary_key(
         &mut self,
-        index_key: &[&JsValue],
+        index_key: &JsValue,
         primary_key: &JsValue,
     ) -> crate::Result<(), Err> {
         let Some(sys) = &self.sys else {
             return Err(crate::Error::CursorCompleted);
         };
-        sys.continue_primary_key(&slice_to_array(index_key), primary_key)
+        sys.continue_primary_key(&index_key, primary_key)
             .map_err(map_cursor_advance_until_primary_key_err)?;
         if transaction_request(self.req.clone()).await?.is_null() {
             self.sys = None;

@@ -1,6 +1,6 @@
 use crate::{transaction::TransactionBuilder, utils::str_slice_to_array, ObjectStore};
 use std::marker::PhantomData;
-use web_sys::{IdbDatabase, IdbObjectStoreParameters};
+use web_sys::{js_sys::JsString, IdbDatabase, IdbObjectStoreParameters};
 
 /// Wrapper for [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)
 #[derive(Debug)]
@@ -125,9 +125,19 @@ impl<'a, Err> ObjectStoreBuilder<'a, Err> {
 
     /// Set the key path for out-of-line keys
     ///
+    /// If you want to use a compound primary key made of multiple attributes, please see [`ObjectStoreBuilder::compound_key_path`].
+    ///
     /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#keypath).
-    pub fn key_path(mut self, path: &[&str]) -> Self {
-        self.options.key_path(Some(&str_slice_to_array(path)));
+    pub fn key_path(mut self, path: &str) -> Self {
+        self.options.key_path(Some(&JsString::from(path)));
+        self
+    }
+
+    /// Set the key path for out-of-line keys
+    ///
+    /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#keypath).
+    pub fn compound_key_path(mut self, paths: &[&str]) -> Self {
+        self.options.key_path(Some(&str_slice_to_array(paths)));
         self
     }
 

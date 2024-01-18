@@ -10,7 +10,7 @@ use crate::{
 use futures_util::future::{Either, FutureExt};
 use std::{future::Future, marker::PhantomData, ops::RangeBounds};
 use web_sys::{
-    js_sys::Array, wasm_bindgen::JsValue, IdbCursorDirection, IdbIndexParameters, IdbObjectStore,
+    js_sys::JsString, wasm_bindgen::JsValue, IdbCursorDirection, IdbIndexParameters, IdbObjectStore,
 };
 
 /// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
@@ -34,17 +34,40 @@ impl<Err> ObjectStore<Err> {
     /// Note that this method can only be called from within an `on_upgrade_needed` callback. It returns
     /// a builder, and calling the `create` method on this builder will perform the actual creation.
     ///
-    /// Interesting points about indices:
-    /// - It is not possible to index `bool` in IndexedDB.
-    /// - If your index uses a column that does not exist, then the object will not be recorded in the index.
-    ///   This is useful for unique compound indices, usually when you'd have indexed a `bool` column otherwise.
+    /// If you want to make an index that searches multiple columns, please use [`ObjectStore::build_compound_index`].
     ///
     /// Internally, this uses [`IDBObjectStore::createIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex).
-    pub fn build_index<'a>(&self, name: &'a str, key_path: &[&str]) -> IndexBuilder<'a, Err> {
+    pub fn build_index<'a>(&self, name: &'a str, key_path: &str) -> IndexBuilder<'a, Err> {
         IndexBuilder {
             store: self.sys.clone(),
             name,
-            key_path: str_slice_to_array(key_path),
+            key_path: JsString::from(key_path).into(),
+            options: IdbIndexParameters::new(),
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Build a compound index over this object store
+    ///
+    /// Note that this method can only be called from within an `on_upgrade_needed` callback. It returns
+    /// a builder, and calling the `create` method on this builder will perform the actual creation.
+    ///
+    /// Interesting points about indices:
+    /// - It is not possible to index `bool` in IndexedDB.
+    /// - If your index uses a column that does not exist, then the object will not be recorded in the index.
+    ///   This is useful for unique compound indices, usually when you would have conditionally indexed a `bool` column otherwise.
+    /// - You cannot build a compound multi-entry index, it needs to be a regular index.
+    ///
+    /// Internally, this uses [`IDBObjectStore::createIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex).
+    pub fn build_compound_index<'a>(
+        &self,
+        name: &'a str,
+        key_paths: &[&str],
+    ) -> IndexBuilder<'a, Err> {
+        IndexBuilder {
+            store: self.sys.clone(),
+            name,
+            key_path: str_slice_to_array(key_paths).into(),
             options: IdbIndexParameters::new(),
             _phantom: PhantomData,
         }
@@ -389,7 +412,7 @@ impl<Err> ObjectStore<Err> {
 pub struct IndexBuilder<'a, Err> {
     store: IdbObjectStore,
     name: &'a str,
-    key_path: Array,
+    key_path: JsValue,
     options: IdbIndexParameters,
     _phantom: PhantomData<Err>,
 }
