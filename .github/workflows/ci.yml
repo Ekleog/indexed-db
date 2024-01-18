@@ -28,3 +28,4 @@ jobs:
 
       # Run the tests
       - run: cargo test --target wasm32-unknown-unknown
+      - run: cargo run --example basic --target wasm32-unknown-unknown
