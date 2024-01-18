@@ -34,6 +34,7 @@ web-sys = { version = "0.3.66", features = [
     "IdbTransactionMode",
     "IdbVersionChangeEvent",
     "Window",
+    "WorkerGlobalScope",
 ] }
 
 [dev-dependencies]
