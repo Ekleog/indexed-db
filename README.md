@@ -68,7 +68,7 @@ async fn example() -> anyhow::Result<()> {
         })
         .await?;
 
-    // If we return `Err` from a transaction, then it will abort
+    // If we return `Err` (or panic) from a transaction, then it will abort
     db.transaction(&["store"])
         .rw()
         .run(|t| async move {
