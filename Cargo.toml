@@ -1,6 +1,6 @@
 [package]
 name = "indexed-db"
-version = "0.2.2" # Next release must be 0.3, as we changed API of Index::count_in
+version = "0.3.0"
 edition = "2021"
 readme = "README.md"
 documentation = "https://docs.rs/indexed-db"
