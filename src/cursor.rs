@@ -1,18 +1,20 @@
 use crate::{
     transaction::transaction_request,
     utils::{
-        map_cursor_advance_err, map_cursor_advance_until_err,
+        make_key_range, map_cursor_advance_err, map_cursor_advance_until_err,
         map_cursor_advance_until_primary_key_err, map_cursor_delete_err, map_cursor_update_err,
+        map_open_cursor_err,
     },
 };
-use std::marker::PhantomData;
+use futures_util::future::Either;
+use std::{future::Future, marker::PhantomData, ops::RangeBounds};
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
-    IdbCursor, IdbCursorDirection, IdbCursorWithValue, IdbRequest,
+    IdbCursor, IdbCursorDirection, IdbCursorWithValue, IdbIndex, IdbObjectStore, IdbRequest,
 };
 
 #[cfg(doc)]
-use crate::Index;
+use crate::{Index, ObjectStore};
 #[cfg(doc)]
 use web_sys::js_sys::Array;
 
@@ -39,6 +41,86 @@ impl CursorDirection {
             CursorDirection::Prev => IdbCursorDirection::Prev,
             CursorDirection::PrevUnique => IdbCursorDirection::Prevunique,
         }
+    }
+}
+
+/// Helper to build cursors over [`ObjectStore`]s
+pub struct CursorBuilder<Err> {
+    source: Either<IdbObjectStore, IdbIndex>,
+    query: JsValue,
+    direction: IdbCursorDirection,
+    _phantom: PhantomData<Err>,
+}
+
+impl<Err> CursorBuilder<Err> {
+    pub(crate) fn from_store(store: IdbObjectStore) -> CursorBuilder<Err> {
+        CursorBuilder {
+            source: Either::Left(store),
+            query: JsValue::UNDEFINED,
+            direction: IdbCursorDirection::Next,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub(crate) fn from_index(index: IdbIndex) -> CursorBuilder<Err> {
+        CursorBuilder {
+            source: Either::Right(index),
+            query: JsValue::UNDEFINED,
+            direction: IdbCursorDirection::Next,
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Open the cursor
+    ///
+    /// Internally, this uses [`IDBObjectStore::openCursor`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/openCursor).
+    pub fn open(self) -> impl Future<Output = crate::Result<Cursor<Err>, Err>> {
+        let req = match self.source {
+            Either::Left(store) => {
+                store.open_cursor_with_range_and_direction(&self.query, self.direction)
+            }
+            Either::Right(index) => {
+                index.open_cursor_with_range_and_direction(&self.query, self.direction)
+            }
+        };
+        match req {
+            Ok(open_req) => Either::Right(Cursor::from(open_req)),
+            Err(err) => Either::Left(std::future::ready(Err(map_open_cursor_err(err)))),
+        }
+    }
+
+    /// Open the cursor as a key-only cursor
+    ///
+    /// Internally, this uses [`IDBObjectStore::openKeyCursor`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/openKeyCursor).
+    pub fn open_key(self) -> impl Future<Output = crate::Result<Cursor<Err>, Err>> {
+        let req = match self.source {
+            Either::Left(store) => {
+                store.open_key_cursor_with_range_and_direction(&self.query, self.direction)
+            }
+            Either::Right(index) => {
+                index.open_key_cursor_with_range_and_direction(&self.query, self.direction)
+            }
+        };
+        match req {
+            Ok(open_req) => Either::Right(Cursor::from(open_req)),
+            Err(err) => Either::Left(std::future::ready(Err(map_open_cursor_err(err)))),
+        }
+    }
+
+    /// Limit the range of the cursor
+    ///
+    /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/openCursor#range).
+    pub fn range(mut self, range: impl RangeBounds<JsValue>) -> crate::Result<Self, Err> {
+        self.query = make_key_range(range)?;
+        Ok(self)
+    }
+
+    /// Define the direction of the cursor
+    ///
+    /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/openCursor#direction).
+    pub fn direction(mut self, direction: CursorDirection) -> Self {
+        self.direction = direction.to_sys();
+        self
     }
 }
 

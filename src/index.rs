@@ -3,10 +3,14 @@ use crate::{
     utils::{
         array_to_vec, make_key_range, map_count_err, map_count_res, map_get_err, none_if_undefined,
     },
+    CursorBuilder,
 };
 use futures_util::future::{Either, FutureExt};
 use std::{future::Future, marker::PhantomData, ops::RangeBounds};
 use web_sys::{wasm_bindgen::JsValue, IdbIndex};
+
+#[cfg(doc)]
+use crate::Cursor;
 
 /// Wrapper for [`IDBIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex),
 /// for use in transactions
@@ -202,6 +206,8 @@ impl<Err> Index<Err> {
         }
     }
 
-    // TODO: openCursor
-    // TODO: openKeyCursor
+    /// Open a [`Cursor`] on this index
+    pub fn cursor(&self) -> CursorBuilder<Err> {
+        CursorBuilder::from_index(self.sys.clone())
+    }
 }

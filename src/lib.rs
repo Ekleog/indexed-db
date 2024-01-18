@@ -17,10 +17,10 @@ mod object_store;
 mod transaction;
 mod utils;
 
-pub use cursor::{Cursor, CursorDirection};
+pub use cursor::{Cursor, CursorBuilder, CursorDirection};
 pub use database::{Database, ObjectStoreBuilder};
 pub use error::{Error, Result};
 pub use factory::{Factory, VersionChangeEvent};
 pub use index::Index;
-pub use object_store::{CursorBuilder as ObjectStoreCursorBuilder, IndexBuilder, ObjectStore};
+pub use object_store::{IndexBuilder, ObjectStore};
 pub use transaction::{Transaction, TransactionBuilder};
