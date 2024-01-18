@@ -10,6 +10,9 @@ use futures_util::future::{Either, FutureExt};
 use std::{future::Future, marker::PhantomData, ops::RangeBounds};
 use web_sys::{js_sys::JsString, wasm_bindgen::JsValue, IdbIndexParameters, IdbObjectStore};
 
+#[cfg(doc)]
+use crate::Cursor;
+
 /// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
 /// for use in transactions
 #[derive(Debug)]
