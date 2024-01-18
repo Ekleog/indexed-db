@@ -10,7 +10,6 @@ wasm_bindgen_test_configure!(run_in_browser);
 #[wasm_bindgen_test]
 async fn smoke_test() {
     tracing_wasm::set_as_global_default();
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     // Factory::get
     let factory = Factory::<()>::get().unwrap();
@@ -257,6 +256,65 @@ async fn auto_rollback() {
         .run(|t| async move {
             assert_eq!(t.object_store("data")?.count().await?, 1);
             Ok::<_, indexed_db::Error<()>>(())
+        })
+        .await
+        .unwrap();
+}
+
+#[wasm_bindgen_test]
+async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
+    let factory = Factory::<()>::get().unwrap();
+
+    let db = factory
+        .open("quux", 1, |evt| async move {
+            let db = evt.database();
+            db.build_object_store("data").create()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    db.transaction(&["data"])
+        .rw()
+        .run(|t| async move {
+            t.object_store("data")?
+                .add_kv(&JsString::from("key1"), &JsString::from("foo"))
+                .await?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    db.transaction(&["data"])
+        .rw()
+        .run(|t| async move {
+            assert!(matches!(
+                t.object_store("data")?
+                    .add_kv(&JsString::from("key1"), &JsString::from("bar"))
+                    .await
+                    .unwrap_err(),
+                indexed_db::Error::AlreadyExists
+            ));
+            t.object_store("data")?
+                .add_kv(&JsString::from("key2"), &JsString::from("baz"))
+                .await?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    db.transaction(&["data"])
+        .rw()
+        .run(|t| async move {
+            assert_eq!(
+                t.object_store("data")?.get_all_keys(None).await?,
+                vec![JsValue::from("key1"), JsValue::from("key2")]
+            );
+            assert_eq!(
+                t.object_store("data")?.get_all(None).await?,
+                vec![JsValue::from("foo"), JsValue::from("baz")]
+            );
+            Ok(())
         })
         .await
         .unwrap();

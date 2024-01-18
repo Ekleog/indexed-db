@@ -1,3 +1,4 @@
+use crate::utils::err_from_event;
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
     DomException,
@@ -104,19 +105,7 @@ impl<Err> Error<Err> {
     }
 
     pub(crate) fn from_js_event(evt: web_sys::Event) -> Error<Err> {
-        let idb_request = evt
-            .target()
-            .expect("Trying to parse indexed_db::Error from an event that has no target")
-            .dyn_into::<web_sys::IdbRequest>()
-            .expect(
-                "Trying to parse indexed_db::Error from an event that is not from an IDBRequest",
-            );
-        Error::from_dom_exception(
-            idb_request
-                .error()
-                .expect("Failed to retrieve the error from the IDBRequest that called on_error")
-                .expect("IDBRequest::error did not return a DOMException"),
-        )
+        Error::from_dom_exception(err_from_event(evt))
     }
 }
 

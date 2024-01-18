@@ -37,7 +37,8 @@ impl<Err> Index<Err> {
     pub fn contains(&self, key: &JsValue) -> impl Future<Output = crate::Result<bool, Err>> {
         match self.sys.count_with_key(key) {
             Ok(count_req) => Either::Right(
-                transaction_request(count_req).map(|res| res.map(map_count_res).map(|n| n != 0)),
+                transaction_request(count_req)
+                    .map(|res| res.map_err(map_count_err).map(|n| map_count_res(n) != 0)),
             ),
             Err(e) => Either::Left(std::future::ready(Err(map_count_err(e)))),
         }
@@ -55,9 +56,10 @@ impl<Err> Index<Err> {
             Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
         match self.sys.count_with_key(&range) {
-            Ok(count_req) => {
-                Either::Right(transaction_request(count_req).map(|res| res.map(map_count_res)))
-            }
+            Ok(count_req) => Either::Right(
+                transaction_request(count_req)
+                    .map(|res| res.map_err(map_count_err).map(map_count_res)),
+            ),
             Err(e) => Either::Left(std::future::ready(Err(map_count_err(e)))),
         }
     }
@@ -67,9 +69,10 @@ impl<Err> Index<Err> {
     /// Internally, this uses [`IDBIndex::get`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/get).
     pub fn get(&self, key: &JsValue) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
         match self.sys.get(key) {
-            Ok(get_req) => {
-                Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
-            }
+            Ok(get_req) => Either::Right(
+                transaction_request(get_req)
+                    .map(|res| res.map_err(map_get_err).map(none_if_undefined)),
+            ),
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }
@@ -88,9 +91,10 @@ impl<Err> Index<Err> {
             Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
         match self.sys.get(&range) {
-            Ok(get_req) => {
-                Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
-            }
+            Ok(get_req) => Either::Right(
+                transaction_request(get_req)
+                    .map(|res| res.map_err(map_get_err).map(none_if_undefined)),
+            ),
             Err(e) => Either::Left(std::future::ready(Err(map_get_err(e)))),
         }
     }
@@ -109,9 +113,9 @@ impl<Err> Index<Err> {
                 .get_all_with_key_and_limit(&JsValue::UNDEFINED, limit),
         };
         match get_req {
-            Ok(get_req) => {
-                Either::Right(transaction_request(get_req).map(|res| res.map(array_to_vec)))
-            }
+            Ok(get_req) => Either::Right(
+                transaction_request(get_req).map(|res| res.map_err(map_get_err).map(array_to_vec)),
+            ),
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }
@@ -134,9 +138,9 @@ impl<Err> Index<Err> {
             Some(limit) => self.sys.get_all_with_key_and_limit(&range, limit),
         };
         match get_req {
-            Ok(get_req) => {
-                Either::Right(transaction_request(get_req).map(|res| res.map(array_to_vec)))
-            }
+            Ok(get_req) => Either::Right(
+                transaction_request(get_req).map(|res| res.map_err(map_get_err).map(array_to_vec)),
+            ),
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }
@@ -153,9 +157,10 @@ impl<Err> Index<Err> {
             Err(e) => return Either::Left(std::future::ready(Err(e))),
         };
         match self.sys.get_key(&range) {
-            Ok(get_req) => {
-                Either::Right(transaction_request(get_req).map(|res| res.map(none_if_undefined)))
-            }
+            Ok(get_req) => Either::Right(
+                transaction_request(get_req)
+                    .map(|res| res.map_err(map_get_err).map(none_if_undefined)),
+            ),
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }
@@ -174,9 +179,9 @@ impl<Err> Index<Err> {
                 .get_all_keys_with_key_and_limit(&JsValue::UNDEFINED, limit),
         };
         match get_req {
-            Ok(get_req) => {
-                Either::Right(transaction_request(get_req).map(|res| res.map(array_to_vec)))
-            }
+            Ok(get_req) => Either::Right(
+                transaction_request(get_req).map(|res| res.map_err(map_get_err).map(array_to_vec)),
+            ),
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }
@@ -199,9 +204,9 @@ impl<Err> Index<Err> {
             Some(limit) => self.sys.get_all_keys_with_key_and_limit(&range, limit),
         };
         match get_req {
-            Ok(get_req) => {
-                Either::Right(transaction_request(get_req).map(|res| res.map(array_to_vec)))
-            }
+            Ok(get_req) => Either::Right(
+                transaction_request(get_req).map(|res| res.map_err(map_get_err).map(array_to_vec)),
+            ),
             Err(err) => Either::Left(std::future::ready(Err(map_get_err(err)))),
         }
     }

@@ -1,4 +1,7 @@
-use crate::{utils::str_slice_to_array, ObjectStore};
+use crate::{
+    utils::{err_from_event, str_slice_to_array},
+    ObjectStore,
+};
 use futures_channel::oneshot;
 use futures_util::future::{self, Either};
 use std::{
@@ -49,9 +52,19 @@ impl<Err> TransactionBuilder<Err> {
     /// If `transaction` returns an `Ok` value, then the transaction will be committed. If it
     /// returns an `Err` value, then it will be aborted.
     ///
+    /// Note that you should avoid sending requests that you do not await. If you do, it is hard
+    /// to say whether the transaction will commit or abort, due to both the IndexedDB and the
+    /// `wasm-bindgen` semantics.
+    ///
     /// Note that transactions cannot be nested.
     ///
     /// Internally, this uses [`IDBDatabase::transaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/transaction).
+    // For more details of what will happen if one does not await:
+    // - If the `Closure` from `transaction_request` is not dropped yet, then the error will be
+    //   explicitly ignored, and thus transaction will commit.
+    // - If the `Closure` from `transaction_request` has already been dropped, then the callback
+    //   will panic. Most likely this will lead to the transaction aborting, but this is an
+    //   untested and unsupported code path.
     pub async fn run<Fun, RetFut, Ret>(self, transaction: Fun) -> crate::Result<Ret, Err>
     where
         Fun: FnOnce(Transaction<Err>) -> RetFut,
@@ -80,7 +93,7 @@ thread_local! {
     static PENDING_REQUESTS: Cell<Option<usize>> = Cell::new(None);
 }
 
-pub(crate) async fn transaction_request<Err>(req: IdbRequest) -> crate::Result<JsValue, Err> {
+pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsValue> {
     let (success_tx, success_rx) = oneshot::channel();
     let (error_tx, error_rx) = oneshot::channel();
 
@@ -113,7 +126,7 @@ pub(crate) async fn transaction_request<Err>(req: IdbRequest) -> crate::Result<J
         ))
     });
 
-    res.map_err(crate::Error::from_js_event).map(|evt| {
+    res.map_err(|evt| err_from_event(evt).into()).map(|evt| {
         evt.target()
             .expect("Trying to parse indexed_db::Error from an event that has no target")
             .dyn_into::<web_sys::IdbRequest>()

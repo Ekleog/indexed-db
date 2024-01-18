@@ -4,7 +4,7 @@ use std::ops::{Bound, RangeBounds};
 use web_sys::{
     js_sys::{Array, Function, JsString, Number, TypeError},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
-    IdbKeyRange, IdbRequest,
+    DomException, IdbKeyRange, IdbRequest,
 };
 
 pub(crate) async fn generic_request(req: IdbRequest) -> Result<web_sys::Event, web_sys::Event> {
@@ -51,6 +51,19 @@ pub(crate) fn str_slice_to_array(s: &[&str]) -> Array {
     res
 }
 
+pub(crate) fn err_from_event(evt: web_sys::Event) -> DomException {
+    evt.prevent_default(); // Avoid the transaction aborting upon an error
+    let idb_request = evt
+        .target()
+        .expect("Trying to parse indexed_db::Error from an event that has no target")
+        .dyn_into::<web_sys::IdbRequest>()
+        .expect("Trying to parse indexed_db::Error from an event that is not from an IDBRequest");
+    idb_request
+        .error()
+        .expect("Failed to retrieve the error from the IDBRequest that called on_error")
+        .expect("IDBRequest::error did not return a DOMException")
+}
+
 pub(crate) fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
     match error_name!(&err) {
         Some("ReadOnlyError") => crate::Error::ReadOnly,
@@ -61,6 +74,16 @@ pub(crate) fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
         Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
         Some("DataCloneError") => crate::Error::FailedClone,
         Some("ConstraintError") => crate::Error::AlreadyExists,
+        _ => crate::Error::from_js_value(err),
+    }
+}
+
+pub(crate) fn map_clear_err<Err>(err: JsValue) -> crate::Error<Err> {
+    match error_name!(&err) {
+        Some("ReadOnlyError") => crate::Error::ReadOnly,
+        Some("TransactionInactiveError") => {
+            panic!("Tried clearing an ObjectStore while the transaction was inactive")
+        }
         _ => crate::Error::from_js_value(err),
     }
 }

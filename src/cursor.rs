@@ -133,7 +133,9 @@ pub struct Cursor<Err> {
 
 impl<Err> Cursor<Err> {
     pub(crate) async fn from(req: IdbRequest) -> crate::Result<Cursor<Err>, Err> {
-        let res = transaction_request(req.clone()).await?;
+        let res = transaction_request(req.clone())
+            .await
+            .map_err(map_open_cursor_err)?;
         let is_already_over = res.is_null();
         let sys = (!is_already_over).then(|| {
             res.dyn_into::<IdbCursor>()
@@ -178,7 +180,11 @@ impl<Err> Cursor<Err> {
             return Err(crate::Error::CursorCompleted);
         };
         sys.advance(count).map_err(map_cursor_advance_err)?;
-        if transaction_request(self.req.clone()).await?.is_null() {
+        if transaction_request(self.req.clone())
+            .await
+            .map_err(map_cursor_advance_err)?
+            .is_null()
+        {
             self.sys = None;
         }
         Ok(())
@@ -193,7 +199,11 @@ impl<Err> Cursor<Err> {
         };
         sys.continue_with_key(key)
             .map_err(map_cursor_advance_until_err)?;
-        if transaction_request(self.req.clone()).await?.is_null() {
+        if transaction_request(self.req.clone())
+            .await
+            .map_err(map_cursor_advance_until_err)?
+            .is_null()
+        {
             self.sys = None;
         }
         Ok(())
@@ -219,7 +229,11 @@ impl<Err> Cursor<Err> {
         };
         sys.continue_primary_key(&index_key, primary_key)
             .map_err(map_cursor_advance_until_primary_key_err)?;
-        if transaction_request(self.req.clone()).await?.is_null() {
+        if transaction_request(self.req.clone())
+            .await
+            .map_err(map_cursor_advance_until_primary_key_err)?
+            .is_null()
+        {
             self.sys = None;
         }
         Ok(())
@@ -235,7 +249,9 @@ impl<Err> Cursor<Err> {
             return Err(crate::Error::CursorCompleted);
         };
         let req = sys.delete().map_err(map_cursor_delete_err)?;
-        transaction_request(req).await?;
+        transaction_request(req)
+            .await
+            .map_err(map_cursor_delete_err)?;
         Ok(())
     }
 
@@ -249,7 +265,9 @@ impl<Err> Cursor<Err> {
             return Err(crate::Error::CursorCompleted);
         };
         let req = sys.update(value).map_err(map_cursor_update_err)?;
-        transaction_request(req).await?;
+        transaction_request(req)
+            .await
+            .map_err(map_cursor_update_err)?;
         Ok(())
     }
 }
