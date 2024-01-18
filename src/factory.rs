@@ -13,7 +13,7 @@ use web_sys::{
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
 ///
-/// Note that it's quite likely that type inference will fail on the `Err` generic argument here.
+/// Note that it is quite likely that type inference will fail on the `Err` generic argument here.
 /// This argument is the type of user-defined errors that will be passed through transactions and
 /// callbacks.
 /// You should set it to whatever error type your program uses around the `indexed-db`-using code.
@@ -85,8 +85,8 @@ impl<Err: 'static> Factory<Err> {
     /// Returns an error if something failed while opening or upgrading the database.
     /// Blocks until it can actually open the database.
     ///
-    /// Note that `version` must be at least `1`. `upgrader` will be called when `version` is higher than the previous
-    /// database version, or upon database creation.
+    /// Note that `version` must be at least `1`. `on_upgrade_needed` will be called when `version` is higher
+    /// than the previous database version, or upon database creation.
     ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
@@ -183,14 +183,14 @@ impl<Err> VersionChangeEvent<Err> {
 
     /// The version before the database upgrade, clamped to `u32::MAX`
     ///
-    /// Internally, this uses [`IDBVersionChangeEvent::old_version`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent/oldVersion)
+    /// Internally, this uses [`IDBVersionChangeEvent::oldVersion`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent/oldVersion)
     pub fn old_version(&self) -> u32 {
         self.sys.old_version() as u32
     }
 
     /// The version after the database upgrade, clamped to `u32::MAX`
     ///
-    /// Internally, this uses [`IDBVersionChangeEvent::new_version`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent/newVersion)
+    /// Internally, this uses [`IDBVersionChangeEvent::newVersion`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent/newVersion)
     pub fn new_version(&self) -> u32 {
         self.sys
             .new_version()

@@ -156,7 +156,7 @@ impl<Err> Index<Err> {
         }
     }
 
-    /// List all the keys in the object store, with a maximum number of results of `limit`, ordered by this index
+    /// List all the keys (for this index) in the object store, with a maximum number of results of `limit`, ordered by this index
     ///
     /// Internally, this uses [`IDBIndex::getAllKeys`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/getAllKeys).
     pub fn get_all_keys(

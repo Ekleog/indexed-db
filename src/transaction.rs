@@ -146,7 +146,7 @@ impl<Err> Transaction<Err> {
 
     /// Returns an [`ObjectStore`] that can be used to operate on data in this transaction
     ///
-    /// Internally, this uses [`IDBTransaction::object_store`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction/objectStore).
+    /// Internally, this uses [`IDBTransaction::objectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction/objectStore).
     pub fn object_store(&self, name: &str) -> crate::Result<ObjectStore<Err>, Err> {
         Ok(ObjectStore::from_sys(self.sys.object_store(name).map_err(
             |err| match error_name!(&err) {

@@ -52,8 +52,7 @@ impl<Err> ObjectStore<Err> {
 
     /// Delete an index from this object store
     ///
-    /// Note that this method can only be called from within an `on_upgrade_needed` callback. It returns
-    /// a builder, and calling the `create` method on this builder will perform the actual creation.
+    /// Note that this method can only be called from within an `on_upgrade_needed` callback.
     ///
     /// Internally, this uses [`IDBObjectStore::deleteIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/deleteIndex).
     pub fn delete_index(&self, name: &str) -> crate::Result<(), Err> {
@@ -66,7 +65,7 @@ impl<Err> ObjectStore<Err> {
             })
     }
 
-    /// Add the value `val` to this object store, and return its auto-computed key
+    /// Add the value `value` to this object store, and return its auto-computed key
     ///
     /// This will error if the key already existed.
     ///
@@ -78,7 +77,7 @@ impl<Err> ObjectStore<Err> {
         }
     }
 
-    /// Add the value `val` to this object store, with key `key`
+    /// Add the value `value` to this object store, with key `key`
     ///
     /// This will error if the key already existed.
     ///
@@ -96,7 +95,7 @@ impl<Err> ObjectStore<Err> {
         }
     }
 
-    /// Sets the value `val` to this object store, and return its auto-computed key
+    /// Add the value `value` to this object store, and return its auto-computed key
     ///
     /// This will overwrite the previous value if the key already existed.
     ///
@@ -108,7 +107,7 @@ impl<Err> ObjectStore<Err> {
         }
     }
 
-    /// Add the value `val` to this object store, with key `key`
+    /// Add the value `value` to this object store, with key `key`
     ///
     /// This will overwrite the previous value if the key already existed.
     ///
@@ -126,7 +125,7 @@ impl<Err> ObjectStore<Err> {
         }
     }
 
-    /// Clears this object store
+    /// Clear this object store
     ///
     /// Internally, this uses [`IDBObjectStore::clear`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/clear).
     pub fn clear(&self) -> impl Future<Output = crate::Result<(), Err>> {
@@ -144,7 +143,7 @@ impl<Err> ObjectStore<Err> {
         }
     }
 
-    /// Counts the number of objects in this store
+    /// Count the number of objects in this store
     ///
     /// Internally, this uses [`IDBObjectStore::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/count).
     pub fn count(&self) -> impl Future<Output = crate::Result<usize, Err>> {
