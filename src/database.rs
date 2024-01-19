@@ -71,7 +71,7 @@ impl<Err> Database<Err> {
     pub fn delete_object_store(&self, name: &str) -> crate::Result<(), Err> {
         self.sys.delete_object_store(name).map_err(|err| match error_name!(&err) {
             Some("InvalidStateError") => crate::Error::InvalidCall,
-            Some("TransactionInactiveError") => panic!("Tried to create an object store with the `versionchange` transaction having already aborted"),
+            Some("TransactionInactiveError") => panic!("Tried to delete an object store with the `versionchange` transaction having already aborted"),
             Some("NotFoundError") => crate::Error::DoesNotExist,
             _ => crate::Error::from_js_value(err),
         })
