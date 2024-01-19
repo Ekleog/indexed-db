@@ -1,12 +1,58 @@
 use indexed_db::{Error, Factory};
+use std::rc::Rc;
 use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
 use web_sys::{
-    js_sys::{JsString, Number},
-    wasm_bindgen::JsValue,
+    js_sys::{Function, JsString, Number},
+    wasm_bindgen::{closure::Closure, JsCast, JsValue},
+    IdbDatabase,
 };
 
 wasm_bindgen_test_configure!(run_in_browser);
 
+#[wasm_bindgen_test]
+async fn reproducer() {
+    let factory = web_sys::window().unwrap().indexed_db().unwrap().unwrap();
+    let db_req = Rc::new(factory.open_with_u32("reproducer", 1).unwrap());
+    let (tx, rx) = futures_channel::oneshot::channel();
+    let db_req2 = db_req.clone();
+    let onupgradeneeded = Closure::once(move |_: web_sys::Event| {
+        db_req2
+            .result()
+            .unwrap()
+            .dyn_into::<IdbDatabase>()
+            .unwrap()
+            .create_object_store("example")
+            .unwrap();
+    });
+    db_req.set_onupgradeneeded(Some(
+        &onupgradeneeded.as_ref().dyn_ref::<Function>().unwrap(),
+    ));
+    let onsuccess = Closure::once(|_: web_sys::Event| tx.send(()).unwrap());
+    db_req.set_onsuccess(Some(&onsuccess.as_ref().dyn_ref::<Function>().unwrap()));
+    rx.await.unwrap();
+    let db = db_req.result().unwrap().dyn_into::<IdbDatabase>().unwrap();
+    // We now have an IDBDatabase. Start a transaction, and run one request on it.
+    let transaction = db.transaction_with_str("example").unwrap();
+    let req = transaction
+        .object_store("example")
+        .unwrap()
+        .get(&JsString::from("foo"))
+        .unwrap();
+    let (tx, rx) = futures_channel::oneshot::channel();
+    let onsuccess = Closure::once(|_: web_sys::Event| tx.send(()).unwrap());
+    req.set_onsuccess(Some(&onsuccess.as_ref().dyn_ref::<Function>().unwrap()));
+    // getting a non-existent value will succeed with a null result
+    rx.await.unwrap();
+    // Here, at this await, singlethread will continue rightaway and multithread will go back to event loop once before resuming
+    // This results in the line below failing on multithread, but passing on singlethread
+    transaction
+        .object_store("example")
+        .unwrap()
+        .get(&JsString::from("bar"))
+        .unwrap();
+}
+
+/*
 #[wasm_bindgen_test]
 async fn smoke_test() {
     tracing_wasm::set_as_global_default();
@@ -324,3 +370,4 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
         .await
         .unwrap();
 }
+*/
