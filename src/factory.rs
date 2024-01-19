@@ -147,6 +147,31 @@ impl<Err: 'static> Factory<Err> {
 
         Ok(Database::from_sys(db))
     }
+
+    /// Open a database at the latest version
+    ///
+    /// Returns an error if something failed while opening.
+    /// Blocks until it can actually open the database.
+    ///
+    /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
+    /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
+    pub async fn open_latest_version(&self, name: &str) -> crate::Result<Database<Err>, Err> {
+        let open_req = self.sys.open(name).map_err(crate::Error::from_js_value)?;
+
+        let completion_fut = generic_request(open_req.clone().into())
+            .map(|res| res.map_err(crate::Error::from_js_event));
+        pin_mut!(completion_fut);
+
+        completion_fut.await?;
+
+        let db = open_req
+            .result()
+            .map_err(crate::Error::from_js_value)?
+            .dyn_into::<IdbDatabase>()
+            .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
+
+        Ok(Database::from_sys(db))
+    }
 }
 
 /// Wrapper for [`IDBVersionChangeEvent`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent)

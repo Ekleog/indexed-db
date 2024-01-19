@@ -43,6 +43,11 @@ async fn smoke_test() {
         .await
         .unwrap_err();
 
+    // Factory::open_latest_version
+    let db = factory.open_latest_version("foo").await.unwrap();
+    assert_eq!(db.name(), "foo");
+    assert_eq!(db.version(), 2);
+
     // Database::build_object_store
     let db = factory
         .open("bar", 1, |evt| async move {
