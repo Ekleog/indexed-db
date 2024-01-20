@@ -172,6 +172,16 @@ impl<Err> Cursor<Err> {
         })
     }
 
+    /// Retrieve the primary key this [`Cursor`] is currently pointing at, or `None` if the cursor is completed
+    ///
+    /// Internally, this uses the [`IDBCursor::primaryKey`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/key) property.
+    pub fn primary_key(&self) -> Option<JsValue> {
+        self.sys.as_ref().map(|sys| {
+            sys.primary_key()
+                .expect("Failed retrieving primary key from known-good cursor")
+        })
+    }
+
     /// Advance this [`Cursor`] by `count` elements
     ///
     /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).

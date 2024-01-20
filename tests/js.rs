@@ -200,16 +200,16 @@ async fn smoke_test() {
             let mut all = Vec::new();
             let mut cursor = stuffs.cursor().open().await.unwrap();
             while let Some(val) = cursor.value() {
-                all.push(val);
+                all.push((cursor.primary_key().unwrap(), val));
                 cursor.delete().await.unwrap();
                 cursor.advance(1).await.unwrap();
             }
             assert_eq!(
                 all,
                 vec![
-                    (**JsString::from("value3")).clone(),
-                    (**JsString::from("value2")).clone(),
-                    (**JsString::from("value1")).clone()
+                    (JsValue::from(3), (**JsString::from("value3")).clone()),
+                    (JsValue::from(4), (**JsString::from("value2")).clone()),
+                    (JsValue::from(5), (**JsString::from("value1")).clone())
                 ]
             );
             assert_eq!(stuffs.count().await.unwrap(), 0);
