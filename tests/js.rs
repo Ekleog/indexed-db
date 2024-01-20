@@ -9,6 +9,18 @@ use web_sys::{
 
 wasm_bindgen_test_configure!(run_in_browser);
 
+fn enqueue_main_task_log(s: &str) {
+    web_sys::console::log_1(&s.into());
+    let _ = web_sys::window()
+        .unwrap()
+        .scheduler()
+        .post_task_with_options(
+            &Closure::once_into_js(|| web_sys::console::log_1(&"main thread".into()))
+                .unchecked_into(),
+            web_sys::SchedulerPostTaskOptions::new().priority(web_sys::TaskPriority::UserBlocking),
+        );
+}
+
 #[wasm_bindgen_test]
 async fn reproducer() {
     let factory = web_sys::window().unwrap().indexed_db().unwrap().unwrap();
@@ -39,10 +51,15 @@ async fn reproducer() {
         .get(&JsString::from("foo"))
         .unwrap();
     let (tx, rx) = futures_channel::oneshot::channel();
-    let onsuccess = Closure::once(|_: web_sys::Event| tx.send(()).unwrap());
+    let onsuccess = Closure::once(|_: web_sys::Event| {
+        enqueue_main_task_log("in onsuccess callback");
+        tx.send(()).unwrap()
+    });
     req.set_onsuccess(Some(&onsuccess.as_ref().dyn_ref::<Function>().unwrap()));
     // getting a non-existent value will succeed with a null result
+    enqueue_main_task_log("before rx.await");
     rx.await.unwrap();
+    web_sys::console::log_1(&"after rx.await".into());
     // Here, at this await, singlethread will continue rightaway and multithread will go back to event loop once before resuming
     // This results in the line below failing on multithread, but passing on singlethread
     transaction

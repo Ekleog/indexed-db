@@ -17,6 +17,7 @@ pin-project-lite = "0.2.13"
 thiserror = "1.0"
 tracing = "*"
 web-sys = { version = "0.3.66", features = [
+    "console", "Scheduler", "SchedulerPostTaskOptions", "TaskPriority",
     "DomException",
     "DomStringList",
     "Event",
@@ -44,3 +45,9 @@ futures = "0.3.30"
 tracing = "0.1.40"
 tracing-wasm = "0.2.1"
 wasm-bindgen-test = "0.3.39"
+
+[patch.crates-io]
+wasm-bindgen = { path = "../wasm-bindgen" }
+wasm-bindgen-shared = { path = "../wasm-bindgen/crates/shared" }
+js-sys = { path = "../wasm-bindgen/crates/js-sys" }
+web-sys = { path = "../wasm-bindgen/crates/web-sys" } # patch out --cfg web_sys_unstable_apis, as it seems to stop the reproducer
