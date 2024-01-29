@@ -140,6 +140,9 @@ impl<Err> TransactionBuilder<Err> {
 }
 
 pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsValue> {
+    // TODO: remove these oneshot-channel in favor of a custom-made atomiccell-based channel.
+    // the custom-made channel will not call the waker (because we're handling wakes another way),
+    // which'll allow using a panicking context again.
     let (success_tx, success_rx) = oneshot::channel();
     let (error_tx, error_rx) = oneshot::channel();
 
