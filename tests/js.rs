@@ -9,7 +9,8 @@ wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 async fn smoke_test() {
-    tracing_wasm::set_as_global_default();
+    // tracing_wasm::set_as_global_default();
+    // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     // Factory::get
     let factory = Factory::<()>::get().unwrap();
@@ -222,6 +223,9 @@ async fn smoke_test() {
 
 #[wasm_bindgen_test]
 async fn auto_rollback() {
+    // tracing_wasm::set_as_global_default();
+    // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
     let factory = Factory::get().unwrap();
 
     let db = factory
