@@ -5,7 +5,10 @@ use web_sys::{
     wasm_bindgen::JsValue,
 };
 
+#[cfg(not(feature = "test-worker"))]
 wasm_bindgen_test_configure!(run_in_browser);
+#[cfg(feature = "test-worker")]
+wasm_bindgen_test_configure!(run_in_worker);
 
 #[wasm_bindgen_test]
 async fn smoke_test() {
