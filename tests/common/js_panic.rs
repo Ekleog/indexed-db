@@ -1,12 +1,7 @@
 use anyhow::Context;
 use indexed_db::Factory;
-use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
+use wasm_bindgen_test::wasm_bindgen_test;
 use web_sys::js_sys::JsString;
-
-#[cfg(not(feature = "test-worker"))]
-wasm_bindgen_test_configure!(run_in_browser);
-#[cfg(feature = "test-worker")]
-wasm_bindgen_test_configure!(run_in_worker);
 
 #[wasm_bindgen_test]
 #[should_panic(expected = "Transaction blocked without any request under way")]
