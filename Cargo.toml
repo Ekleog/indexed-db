@@ -1,10 +1,10 @@
 [package]
 name = "indexed-db"
-version = "0.3.2"
+version = "0.4.0"
 edition = "2021"
 readme = "README.md"
 documentation = "https://docs.rs/indexed-db"
-description = "Bindings to IndexedDB that default the transactions to aborting"
+description = "Bindings to IndexedDB that default the transactions to aborting and can work multi-threaded"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Ekleog/indexed-db"
 keywords = ["wasm", "indexeddb", "async", "web", "webassembly"]
@@ -14,6 +14,7 @@ categories = ["asynchronous", "database", "wasn", "web-programming"]
 futures-channel = "0.3.30"
 futures-util = "0.3.30"
 pin-project-lite = "0.2.13"
+scoped-tls = "1.0"
 thiserror = "1.0"
 web-sys = { version = "0.3.66", features = [
     "DomException",
@@ -41,5 +42,6 @@ web-sys = { version = "0.3.66", features = [
 anyhow = "1.0"
 console_error_panic_hook = "0.1.7"
 futures = "0.3.30"
+tracing = "0.1.40"
 tracing-wasm = "0.2.1"
 wasm-bindgen-test = "0.3.39"

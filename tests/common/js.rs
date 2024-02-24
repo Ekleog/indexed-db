@@ -7,7 +7,8 @@ use web_sys::{
 
 #[wasm_bindgen_test]
 async fn smoke_test() {
-    tracing_wasm::set_as_global_default();
+    // tracing_wasm::set_as_global_default();
+    // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     // Factory::get
     let factory = Factory::<()>::get().unwrap();
@@ -40,6 +41,11 @@ async fn smoke_test() {
         .open("foo", 1, |_| async move { Ok(()) })
         .await
         .unwrap_err();
+
+    // Factory::open_latest_version
+    let db = factory.open_latest_version("foo").await.unwrap();
+    assert_eq!(db.name(), "foo");
+    assert_eq!(db.version(), 2);
 
     // Database::build_object_store
     let db = factory
@@ -193,16 +199,16 @@ async fn smoke_test() {
             let mut all = Vec::new();
             let mut cursor = stuffs.cursor().open().await.unwrap();
             while let Some(val) = cursor.value() {
-                all.push(val);
+                all.push((cursor.primary_key().unwrap(), val));
                 cursor.delete().await.unwrap();
                 cursor.advance(1).await.unwrap();
             }
             assert_eq!(
                 all,
                 vec![
-                    (**JsString::from("value3")).clone(),
-                    (**JsString::from("value2")).clone(),
-                    (**JsString::from("value1")).clone()
+                    (JsValue::from(3), (**JsString::from("value3")).clone()),
+                    (JsValue::from(4), (**JsString::from("value2")).clone()),
+                    (JsValue::from(5), (**JsString::from("value1")).clone())
                 ]
             );
             assert_eq!(stuffs.count().await.unwrap(), 0);
@@ -215,6 +221,9 @@ async fn smoke_test() {
 
 #[wasm_bindgen_test]
 async fn auto_rollback() {
+    // tracing_wasm::set_as_global_default();
+    // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
     let factory = Factory::get().unwrap();
 
     let db = factory

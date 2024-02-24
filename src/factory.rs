@@ -1,10 +1,10 @@
-use crate::{transaction::TransactionPoller, utils::generic_request, Database, Transaction};
+use crate::{transaction::unsafe_jar, utils::generic_request, Database, Transaction};
 use futures_channel::oneshot;
 use futures_util::{
     future::{self, Either},
     pin_mut, FutureExt,
 };
-use std::{future::Future, marker::PhantomData};
+use std::{future::Future, marker::PhantomData, sync::atomic::Ordering};
 use web_sys::{
     js_sys::{self, Function},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
@@ -104,8 +104,8 @@ impl<Err: 'static> Factory<Err> {
         on_upgrade_needed: Fun,
     ) -> crate::Result<Database<Err>, Err>
     where
-        Fun: FnOnce(VersionChangeEvent<Err>) -> RetFut,
-        RetFut: Future<Output = crate::Result<(), Err>>,
+        Fun: 'static + FnOnce(VersionChangeEvent<Err>) -> RetFut,
+        RetFut: 'static + Future<Output = crate::Result<(), Err>>,
     {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
@@ -116,35 +116,74 @@ impl<Err: 'static> Factory<Err> {
             .open_with_u32(name, version)
             .map_err(crate::Error::from_js_value)?;
 
-        let (tx, rx) = oneshot::channel();
-        let closure = Closure::once(|evt: IdbVersionChangeEvent| {
+        let (upgrade_tx, upgrade_rx) = oneshot::channel();
+        let on_upgrade_needed = Closure::once(|evt: IdbVersionChangeEvent| {
             let evt = VersionChangeEvent::from_sys(evt);
-            if let Err(_) = tx.send(evt) {
-                panic!("IDBOpenDBRequest's on_success handler was called before on_upgrade_needed");
-            }
+            let transaction = evt.transaction().as_sys().clone();
+            let fut = {
+                let transaction = transaction.clone();
+                async move {
+                    let res = on_upgrade_needed(evt).await;
+                    let return_value = match &res {
+                        Ok(_) => Ok(()),
+                        Err(_) => Err(()),
+                    };
+                    if let Err(_) = upgrade_tx.send(res) {
+                        // Opening request was cancelled by dropping, abort the transaction
+                        let _ = transaction.abort();
+                    }
+                    return_value
+                }
+            };
+            unsafe_jar::run(transaction, fut);
         });
-        open_req.set_onupgradeneeded(Some(closure.as_ref().dyn_ref::<Function>().unwrap()));
+        open_req.set_onupgradeneeded(Some(
+            on_upgrade_needed.as_ref().dyn_ref::<Function>().unwrap(),
+        ));
+
+        let completion_fut = generic_request(open_req.clone().into());
+        pin_mut!(completion_fut);
+
+        let res = future::select(upgrade_rx, completion_fut).await;
+        if unsafe_jar::POLLED_FORBIDDEN_THING.load(Ordering::Relaxed) {
+            panic!("Transaction blocked without any request under way");
+        }
+
+        match res {
+            Either::Right((completion, _)) => {
+                completion.map_err(crate::Error::from_js_event)?;
+            }
+            Either::Left((upgrade_res, completion_fut)) => {
+                let upgrade_res = upgrade_res.expect("Closure dropped before its end of scope");
+                upgrade_res?;
+                completion_fut.await.map_err(crate::Error::from_js_event)?;
+            }
+        }
+
+        let db = open_req
+            .result()
+            .map_err(crate::Error::from_js_value)?
+            .dyn_into::<IdbDatabase>()
+            .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
+
+        Ok(Database::from_sys(db))
+    }
+
+    /// Open a database at the latest version
+    ///
+    /// Returns an error if something failed while opening.
+    /// Blocks until it can actually open the database.
+    ///
+    /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
+    /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
+    pub async fn open_latest_version(&self, name: &str) -> crate::Result<Database<Err>, Err> {
+        let open_req = self.sys.open(name).map_err(crate::Error::from_js_value)?;
 
         let completion_fut = generic_request(open_req.clone().into())
             .map(|res| res.map_err(crate::Error::from_js_event));
         pin_mut!(completion_fut);
 
-        match future::select(rx, completion_fut).await {
-            Either::Right((completion, _)) => {
-                completion?;
-            }
-            Either::Left((evt, completion_fut)) => {
-                let evt = evt.expect("Closure dropped before its end of scope");
-                let transaction = evt.transaction().as_sys().clone();
-                TransactionPoller {
-                    fut: on_upgrade_needed(evt),
-                    transaction,
-                    pending_requests: 0,
-                }
-                .await?;
-                completion_fut.await?;
-            }
-        }
+        completion_fut.await?;
 
         let db = open_req
             .result()

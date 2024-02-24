@@ -1,12 +1,14 @@
 # indexed-db
 
-Bindings for IndexedDB, that default transaction to aborting.
+Bindings for IndexedDB, that default transaction to aborting and can work multi-threaded.
 
 ## Why yet another IndexedDB crate?
 
 As of the time of my writing this crate, the alternatives have the default IndexedDB behavior of transaction committing. This is because IndexedDB transactions have strange committing semantics: they commit as soon as the application returns to the event loop without an ongoing request.
 
 This crate forces your transactions to respect the IndexedDB requirements, so as to make it possible to abort transactions upon errors, rather than having them auto-commit.
+
+Incidentally, this crate, at the time of publishing version 0.4.0, is the only IndexedDB crate that works fine under the multi-threaded executor of `wasm-bindgen`. You can find all the details in [this thread](https://github.com/rustwasm/wasm-bindgen/issues/3798).
 
 ## Error handling
 

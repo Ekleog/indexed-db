@@ -145,7 +145,7 @@ impl<Err> Index<Err> {
         }
     }
 
-    /// Get the first existing key (for this index) in the provided range
+    /// Get the first existing primary key for an object that has a key (for this index) in the provided range
     ///
     /// Internally, this uses [`IDBIndex::getKey`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/getKey).
     pub fn get_first_key_in(
@@ -165,7 +165,7 @@ impl<Err> Index<Err> {
         }
     }
 
-    /// List all the keys (for this index) in the object store, with a maximum number of results of `limit`, ordered by this index
+    /// List all the primary keys in the object store, with a maximum number of results of `limit`, ordered by this index
     ///
     /// Internally, this uses [`IDBIndex::getAllKeys`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/getAllKeys).
     pub fn get_all_keys(
@@ -186,8 +186,8 @@ impl<Err> Index<Err> {
         }
     }
 
-    /// List all the keys (for this index) in the provided range, with a maximum number of results of `limit`,
-    /// ordered by this index
+    /// List all the primary keys of objects with a key (for this index)in the provided range, with a maximum number
+    /// of results of `limit`, ordered by this index
     ///
     /// Internally, this uses [`IDBIndex::getAllKeys`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/getAllKeys).
     pub fn get_all_keys_in(
