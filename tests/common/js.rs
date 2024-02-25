@@ -1,11 +1,9 @@
 use indexed_db::{Error, Factory};
-use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
+use wasm_bindgen_test::wasm_bindgen_test;
 use web_sys::{
     js_sys::{JsString, Number},
     wasm_bindgen::JsValue,
 };
-
-wasm_bindgen_test_configure!(run_in_browser);
 
 #[wasm_bindgen_test]
 async fn smoke_test() {

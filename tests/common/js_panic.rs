@@ -1,9 +1,7 @@
 use anyhow::Context;
 use indexed_db::Factory;
-use wasm_bindgen_test::{wasm_bindgen_test, wasm_bindgen_test_configure};
+use wasm_bindgen_test::wasm_bindgen_test;
 use web_sys::js_sys::JsString;
-
-wasm_bindgen_test_configure!(run_in_browser);
 
 // Currently, panic=abort, so the sender is never Drop'd in the callback handlers.
 // As such, despite the proper error message being displayed by the console error

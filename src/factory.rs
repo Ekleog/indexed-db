@@ -6,9 +6,9 @@ use futures_util::{
 };
 use std::{future::Future, marker::PhantomData, sync::atomic::Ordering};
 use web_sys::{
-    js_sys::Function,
+    js_sys::{self, Function},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
-    IdbDatabase, IdbFactory, IdbOpenDbRequest, IdbVersionChangeEvent,
+    IdbDatabase, IdbFactory, IdbOpenDbRequest, IdbVersionChangeEvent, WorkerGlobalScope,
 };
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
@@ -28,11 +28,18 @@ impl<Err: 'static> Factory<Err> {
     ///
     /// This internally uses [`indexedDB`](https://developer.mozilla.org/en-US/docs/Web/API/indexedDB).
     pub fn get() -> crate::Result<Factory<Err>, Err> {
-        let window = web_sys::window().ok_or(crate::Error::NotInBrowser)?;
-        let sys = window
-            .indexed_db()
+        let indexed_db = if let Some(window) = web_sys::window() {
+            window.indexed_db()
+        } else if let Ok(worker_scope) = js_sys::global().dyn_into::<WorkerGlobalScope>() {
+            worker_scope.indexed_db()
+        } else {
+            return Err(crate::Error::NotInBrowser);
+        };
+
+        let sys = indexed_db
             .map_err(|_| crate::Error::IndexedDbDisabled)?
             .ok_or(crate::Error::IndexedDbDisabled)?;
+
         Ok(Factory {
             sys,
             _phantom: PhantomData,
