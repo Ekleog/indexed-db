@@ -10,7 +10,6 @@ use std::{
     future::Future,
     pin::Pin,
     rc::Rc,
-    sync::atomic::{AtomicBool, Ordering},
     task::{Context, Poll},
 };
 use web_sys::{
@@ -28,7 +27,7 @@ struct State {
 }
 
 scoped_thread_local!(static CURRENT: State);
-pub(crate) static POLLED_FORBIDDEN_THING: AtomicBool = AtomicBool::new(false);
+thread_local!(pub(crate) static POLLED_FORBIDDEN_THING: Cell<bool> = Cell::new(false));
 
 fn poll_it(state: &State) {
     CURRENT.set(&state, || {
@@ -65,7 +64,7 @@ fn poll_it(state: &State) {
                     // an `await` on something other than transaction requests. Abort in order to
                     // avoid the default auto-commit behavior.
                     let _ = state.transaction.abort();
-                    POLLED_FORBIDDEN_THING.store(true, Ordering::Relaxed);
+                    POLLED_FORBIDDEN_THING.set(true);
                     panic!("Transaction blocked without any request under way");
                 }
             }

@@ -4,7 +4,7 @@ use crate::{
 };
 use futures_channel::oneshot;
 use futures_util::future::{self, Either};
-use std::{future::Future, marker::PhantomData, sync::atomic::Ordering};
+use std::{future::Future, marker::PhantomData};
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
@@ -132,7 +132,7 @@ impl<Err> TransactionBuilder<Err> {
         };
         unsafe_jar::run(t, fut);
         let res = rx.await;
-        if unsafe_jar::POLLED_FORBIDDEN_THING.load(Ordering::Relaxed) {
+        if unsafe_jar::POLLED_FORBIDDEN_THING.get() {
             panic!("Transaction blocked without any request under way");
         }
         res.expect("Transaction never completed")

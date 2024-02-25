@@ -4,7 +4,7 @@ use futures_util::{
     future::{self, Either},
     pin_mut, FutureExt,
 };
-use std::{future::Future, marker::PhantomData, sync::atomic::Ordering};
+use std::{future::Future, marker::PhantomData};
 use web_sys::{
     js_sys::{self, Function},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
@@ -145,7 +145,7 @@ impl<Err: 'static> Factory<Err> {
         pin_mut!(completion_fut);
 
         let res = future::select(upgrade_rx, completion_fut).await;
-        if unsafe_jar::POLLED_FORBIDDEN_THING.load(Ordering::Relaxed) {
+        if unsafe_jar::POLLED_FORBIDDEN_THING.get() {
             panic!("Transaction blocked without any request under way");
         }
 
