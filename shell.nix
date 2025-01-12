@@ -7,7 +7,9 @@ pkgs.stdenv.mkDerivation {
     (with pkgs; [
       cargo-bolero
       cargo-nextest
-      chromedriver
+      #chromedriver
+      #chromium
+      firefox
       geckodriver
       just
       niv
