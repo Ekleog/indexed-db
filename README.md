@@ -1,6 +1,6 @@
 # indexed-db
 
-Bindings for IndexedDB, that default transaction to aborting and can work multi-threaded.
+Bindings for IndexedDB, that default transactions to aborting and can work multi-threaded.
 
 ## Why yet another IndexedDB crate?
 
