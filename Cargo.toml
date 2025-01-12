@@ -1,6 +1,6 @@
 [package]
 name = "indexed-db"
-version = "0.4.1"
+version = "0.4.2"
 edition = "2021"
 readme = "README.md"
 documentation = "https://docs.rs/indexed-db"
@@ -8,7 +8,7 @@ description = "Bindings to IndexedDB that default the transactions to aborting a
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/Ekleog/indexed-db"
 keywords = ["wasm", "indexeddb", "async", "web", "webassembly"]
-categories = ["asynchronous", "database", "wasn", "web-programming"]
+categories = ["asynchronous", "database", "wasm", "web-programming"]
 
 [dependencies]
 futures-channel = "0.3.30"
