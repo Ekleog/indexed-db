@@ -445,16 +445,16 @@ impl<'a, Err> IndexBuilder<'a, Err> {
     /// Mark this index as unique
     ///
     /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex#unique).
-    pub fn unique(mut self) -> Self {
-        self.options.unique(true);
+    pub fn unique(self) -> Self {
+        self.options.set_unique(true);
         self
     }
 
     /// Mark this index as multi-entry
     ///
     /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex#multientry).
-    pub fn multi_entry(mut self) -> Self {
-        self.options.multi_entry(true);
+    pub fn multi_entry(self) -> Self {
+        self.options.set_multi_entry(true);
         self
     }
 }

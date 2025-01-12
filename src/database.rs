@@ -128,24 +128,24 @@ impl<'a, Err> ObjectStoreBuilder<'a, Err> {
     /// If you want to use a compound primary key made of multiple attributes, please see [`ObjectStoreBuilder::compound_key_path`].
     ///
     /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#keypath).
-    pub fn key_path(mut self, path: &str) -> Self {
-        self.options.key_path(Some(&JsString::from(path)));
+    pub fn key_path(self, path: &str) -> Self {
+        self.options.set_key_path(&JsString::from(path));
         self
     }
 
     /// Set the key path for out-of-line keys
     ///
     /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#keypath).
-    pub fn compound_key_path(mut self, paths: &[&str]) -> Self {
-        self.options.key_path(Some(&str_slice_to_array(paths)));
+    pub fn compound_key_path(self, paths: &[&str]) -> Self {
+        self.options.set_key_path(&str_slice_to_array(paths));
         self
     }
 
     /// Enable auto-increment for the key
     ///
     /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#autoincrement).
-    pub fn auto_increment(mut self) -> Self {
-        self.options.auto_increment(true);
+    pub fn auto_increment(self) -> Self {
+        self.options.set_auto_increment(true);
         self
     }
 }
