@@ -1,7 +1,7 @@
 use indexed_db::{Error, Factory};
 use wasm_bindgen_test::wasm_bindgen_test;
 use web_sys::{
-    js_sys::{JsString, Number},
+    js_sys::{JsString, Number, Uint8Array},
     wasm_bindgen::JsValue,
 };
 
@@ -321,6 +321,46 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
                 t.object_store("data")?.get_all(None).await?,
                 vec![JsValue::from("foo"), JsValue::from("baz")]
             );
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+#[wasm_bindgen_test]
+async fn typed_array_keys() {
+    let factory = Factory::<()>::get().unwrap();
+
+    let db = factory
+        .open("db12", 1, |evt| async move {
+            let db = evt.database();
+            db.build_object_store("data").create()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    db.transaction(&["data"])
+        .rw()
+        .run(|t| async move {
+            let data = t.object_store("data")?;
+            data.add_kv(&Uint8Array::from(&b"key1"[..]), &JsString::from("foo"))
+                .await?;
+            data.add_kv(&Uint8Array::from(&b"key2"[..]), &JsString::from("bar"))
+                .await?;
+            data.add_kv(&Uint8Array::from(&b"key3"[..]), &JsString::from("baz"))
+                .await?;
+            assert_eq!(
+                2,
+                data.count_in(Uint8Array::from(&b"key2"[..]).as_ref()..)
+                    .await?
+            );
+            assert_eq!(
+                1,
+                data.count_in(..Uint8Array::from(&b"key2"[..]).as_ref())
+                    .await?
+            );
+
             Ok(())
         })
         .await
