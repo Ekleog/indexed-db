@@ -101,7 +101,7 @@ impl<Err: 'static> Factory<Err> {
         &self,
         name: &str,
         version: u32,
-        on_upgrade_needed: impl AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err> + 'static,
+        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
     ) -> crate::Result<Database<Err>, Err> {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
