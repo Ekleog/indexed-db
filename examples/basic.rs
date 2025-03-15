@@ -10,7 +10,7 @@ async fn example() -> anyhow::Result<()> {
 
     // Open the database, creating it if needed
     let db = factory
-        .open("database", 1, |evt| async move {
+        .open("database", 1, async move |evt| {
             let db = evt.database();
             let store = db.build_object_store("store").auto_increment().create()?;
 
@@ -25,7 +25,7 @@ async fn example() -> anyhow::Result<()> {
     // In a transaction, add two records
     db.transaction(&["store"])
         .rw()
-        .run(|t| async move {
+        .run(async move |t| {
             let store = t.object_store("store")?;
             store.add(&JsString::from("bar")).await?;
             store.add(&JsString::from("baz")).await?;
@@ -35,7 +35,7 @@ async fn example() -> anyhow::Result<()> {
 
     // In another transaction, read the first record
     db.transaction(&["store"])
-        .run(|t| async move {
+        .run(async move |t| {
             let data = t.object_store("store")?.get_all(Some(1)).await?;
             if data.len() != 1 {
                 Err(std::io::Error::new(
@@ -50,7 +50,7 @@ async fn example() -> anyhow::Result<()> {
     // If we return `Err` (or panic) from a transaction, then it will abort
     db.transaction(&["store"])
         .rw()
-        .run(|t| async move {
+        .run(async move |t| {
             let store = t.object_store("store")?;
             store.add(&JsString::from("quux")).await?;
             if store.count().await? > 3 {
@@ -67,7 +67,7 @@ async fn example() -> anyhow::Result<()> {
 
     // And no write will have happened
     db.transaction(&["store"])
-        .run(|t| async move {
+        .run(async move |t| {
             let num_items = t.object_store("store")?.count().await?;
             assert_eq!(num_items, 3);
             Ok(())
@@ -76,7 +76,7 @@ async fn example() -> anyhow::Result<()> {
 
     // More complex example: using cursors to iterate over a store
     db.transaction(&["store"])
-        .run(|t| async move {
+        .run(async move |t| {
             let mut all_items = Vec::new();
             let mut cursor = t.object_store("store")?.cursor().open().await?;
             while let Some(value) = cursor.value() {
