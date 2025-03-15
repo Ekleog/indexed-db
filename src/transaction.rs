@@ -4,7 +4,7 @@ use crate::{
 };
 use futures_channel::oneshot;
 use futures_util::future::{self, Either};
-use std::{future::Future, marker::PhantomData};
+use std::marker::PhantomData;
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
@@ -98,11 +98,11 @@ impl<Err> TransactionBuilder<Err> {
     // - If the `Closure` from `transaction_request` has already been dropped, then the callback
     //   will panic. Most likely this will lead to the transaction aborting, but this is an
     //   untested and unsupported code path.
-    pub async fn run<Fun, RetFut, Ret>(self, transaction: Fun) -> crate::Result<Ret, Err>
+    pub async fn run<Ret: 'static>(
+        self,
+        transaction: impl AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err> + 'static,
+    ) -> crate::Result<Ret, Err>
     where
-        Fun: 'static + FnOnce(Transaction<Err>) -> RetFut,
-        RetFut: 'static + Future<Output = crate::Result<Ret, Err>>,
-        Ret: 'static,
         Err: 'static,
     {
         let t = self
