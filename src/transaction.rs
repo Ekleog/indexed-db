@@ -98,11 +98,12 @@ impl<Err> TransactionBuilder<Err> {
     // - If the `Closure` from `transaction_request` has already been dropped, then the callback
     //   will panic. Most likely this will lead to the transaction aborting, but this is an
     //   untested and unsupported code path.
-    pub async fn run<Ret: 'static>(
+    pub async fn run<Ret>(
         self,
-        transaction: impl AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err> + 'static,
+        transaction: impl 'static + AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err>,
     ) -> crate::Result<Ret, Err>
     where
+        Ret: 'static,
         Err: 'static,
     {
         let t = self
