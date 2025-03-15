@@ -17,7 +17,7 @@ async fn other_awaits_panic() {
     let factory = Factory::<anyhow::Error>::get().unwrap();
 
     let db = factory
-        .open("baz", 1, |evt| async move {
+        .open("baz", 1, async move |evt| {
             let db = evt.database();
             db.build_object_store("data").auto_increment().create()?;
             Ok(())
@@ -29,7 +29,7 @@ async fn other_awaits_panic() {
 
     db.transaction(&["data"])
         .rw()
-        .run(|t| async move {
+        .run(async move |t| {
             t.object_store("data")?.add(&JsString::from("foo")).await?;
             rx.await.context("awaiting for something external")?;
             t.object_store("data")?.add(&JsString::from("bar")).await?;
@@ -52,7 +52,7 @@ async fn await_in_versionchange_panics() {
     let (tx, rx) = futures_channel::oneshot::channel();
 
     factory
-        .open("baz", 1, |evt| async move {
+        .open("baz", 1, async move |evt| {
             let db = evt.database();
             db.build_object_store("data").auto_increment().create()?;
             rx.await.context("awaiting for something external")?;

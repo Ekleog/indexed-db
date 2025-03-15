@@ -4,7 +4,7 @@ use futures_util::{
     future::{self, Either},
     pin_mut, FutureExt,
 };
-use std::{future::Future, marker::PhantomData};
+use std::marker::PhantomData;
 use web_sys::{
     js_sys::{self, Function},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
@@ -97,16 +97,12 @@ impl<Err: 'static> Factory<Err> {
     ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
-    pub async fn open<Fun, RetFut>(
+    pub async fn open(
         &self,
         name: &str,
         version: u32,
-        on_upgrade_needed: Fun,
-    ) -> crate::Result<Database<Err>, Err>
-    where
-        Fun: 'static + FnOnce(VersionChangeEvent<Err>) -> RetFut,
-        RetFut: 'static + Future<Output = crate::Result<(), Err>>,
-    {
+        on_upgrade_needed: impl AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err> + 'static,
+    ) -> crate::Result<Database<Err>, Err> {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
         }
@@ -117,7 +113,7 @@ impl<Err: 'static> Factory<Err> {
             .map_err(crate::Error::from_js_value)?;
 
         let (upgrade_tx, upgrade_rx) = oneshot::channel();
-        let on_upgrade_needed = Closure::once(|evt: IdbVersionChangeEvent| {
+        let on_upgrade_needed = Closure::once(move |evt: IdbVersionChangeEvent| {
             let evt = VersionChangeEvent::from_sys(evt);
             let transaction = evt.transaction().as_sys().clone();
             let fut = {

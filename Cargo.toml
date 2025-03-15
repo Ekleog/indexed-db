@@ -9,6 +9,7 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/Ekleog/indexed-db"
 keywords = ["wasm", "indexeddb", "async", "web", "webassembly"]
 categories = ["asynchronous", "database", "wasm", "web-programming"]
+rust-version = "1.85"
 
 [dependencies]
 futures-channel = "0.3.30"
