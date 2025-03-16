@@ -13,7 +13,6 @@ use scoped_tls::scoped_thread_local;
 use std::{
     cell::{Cell, OnceCell, RefCell},
     future::Future,
-    marker::PhantomData,
     panic::AssertUnwindSafe,
     pin::Pin,
     rc::{Rc, Weak},
@@ -113,50 +112,57 @@ fn poll_it(state: &Rc<RunnableTransaction<'static>>) {
     });
 }
 
-pub struct ScopeCallback<'scope, Args> {
-    state: Rc<OnceCell<Weak<RunnableTransaction<'static>>>>,
-    maker: Option<Box<dyn 'static + FnOnce(Args) -> RunnableTransaction<'static>>>,
+struct DropFlag(Rc<Cell<bool>>);
 
-    // 'static itself, but also invariant in 'scope
-    // See the definition of std::thread::Scope for why invariance is important.
-    _phantom: PhantomData<fn(&'scope ()) -> &'scope ()>,
+impl Drop for DropFlag {
+    fn drop(&mut self) {
+        self.0.set(true);
+    }
 }
 
-impl<'scope, Args> ScopeCallback<'scope, Args> {
-    pub fn set_maker(&mut self, maker: impl 'scope + FnOnce(Args) -> RunnableTransaction<'scope>) {
-        // TODO: this is not safe, but can be made safe by adjusting the Rc checks
-        let maker: Box<dyn 'scope + FnOnce(Args) -> RunnableTransaction<'scope>> = Box::new(maker);
-        let maker: Box<dyn 'static + FnOnce(Args) -> RunnableTransaction<'static>> =
-            unsafe { std::mem::transmute(maker) };
-        self.maker = Some(maker);
-    }
+pub struct ScopeCallback<Args> {
+    state: Rc<OnceCell<Weak<RunnableTransaction<'static>>>>,
+    _dropped: DropFlag,
+    maker: Box<dyn 'static + FnOnce(Args) -> RunnableTransaction<'static>>,
+}
 
-    pub fn run(mut self, args: Args) {
-        let maker = self.maker.take().expect("Bug in the indexed-db crate: called ScopeCallback::run without calling ScopeCallback::set_maker first");
-        let state: RunnableTransaction<'static> = (maker)(args);
-        // SAFETY: We're extending the lifetime of `state` to `'static`.
-        // This is safe because the `RunnableTransaction` is not stored anywhere else, and it will be dropped
-        // before the end of the enclosing `extend_lifetime_to_scope_and_run` call, at the `Weak::strong_count` check.
-        // If it is not, we'll panic and abort the whole process.
-        // `'scope` is also guaranteed to outlive `extend_lifetime_to_scope_and_run`.
-        let state: RunnableTransaction<'static> = unsafe { std::mem::transmute(state) };
-        let state = Rc::new(state);
-        let _ = self.state.set(Rc::downgrade(&state));
-        poll_it(&state);
+impl<Args> ScopeCallback<Args> {
+    pub fn run(self, args: Args) {
+        let made_state = Rc::new((self.maker)(args));
+        let _ = self.state.set(Rc::downgrade(&made_state));
+        poll_it(&made_state);
     }
 }
 
 /// Panics and aborts the whole process if the transaction is not dropped before the end of `must_be_dropped_before`
-pub async fn extend_lifetime_to_scope_and_run<'scope, ScopeArgs, ScopeRet>(
-    scope: impl AsyncFnOnce(ScopeCallback<'scope, ScopeArgs>) -> ScopeRet,
+pub async fn extend_lifetime_to_scope_and_run<'scope, MakerArgs, ScopeRet>(
+    maker: Box<dyn 'scope + FnOnce(MakerArgs) -> RunnableTransaction<'scope>>,
+    scope: impl 'scope + AsyncFnOnce(ScopeCallback<MakerArgs>) -> ScopeRet,
 ) -> ScopeRet {
+    // SAFETY: We're extending the lifetime of `maker` as well as its return value to `'static`.
+    // This is safe because the `RunnableTransaction` is not stored anywhere else, and it will be dropped
+    // before the end of the enclosing `extend_lifetime_to_scope_and_run` call, at the `Weak::strong_count` check.
+    // If it is not, we'll panic and abort the whole process.
+    // `'scope` is also guaranteed to outlive `extend_lifetime_to_scope_and_run`.
+    // Finally, `maker` itself is guaranteed to not escape `'scope` because it can only be consumed by `run`,
+    // and the `ScopeCallback` itself is guaranteed to not escape `'scope` thanks to the check on `dropped`.
+    let maker: Box<dyn 'static + FnOnce(MakerArgs) -> RunnableTransaction<'static>> =
+        unsafe { std::mem::transmute(maker) };
+
     let state = Rc::new(OnceCell::new());
+    let dropped = Rc::new(Cell::new(false));
     let callback = ScopeCallback {
         state: state.clone(),
-        maker: None,
-        _phantom: PhantomData,
+        _dropped: DropFlag(dropped.clone()),
+        maker,
     };
     let result = AssertUnwindSafe((scope)(callback)).catch_unwind().await;
+    if !dropped.get() {
+        let _ = std::panic::catch_unwind(|| {
+            panic!("Bug in the indexed-db crate: the ScopeCallback was not consumed before the end of its logical lifetime")
+        });
+        std::process::abort();
+    }
     if let Some(state) = state.get() {
         if Weak::strong_count(&state) != 0 {
             // Make sure that regardless of what the user could be doing, if we're overextending the lifetime we'll panic and abort

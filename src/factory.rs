@@ -119,20 +119,19 @@ impl<Err: 'static> Factory<Err> {
         let ran_upgrade_cb = Cell::new(false);
         let ran_upgrade_cb = &ran_upgrade_cb;
 
-        extend_lifetime_to_scope_and_run(async move |mut s| {
+        extend_lifetime_to_scope_and_run(Box::new(move |(transaction, event): (IdbTransaction, VersionChangeEvent<Err>)| {
+            let fut = async move {
+                ran_upgrade_cb.set(true);
+                on_upgrade_needed(event).await
+            };
+            unsafe_jar::RunnableTransaction::new(
+                transaction,
+                fut,
+                upgrade_res_tx,
+                polled_forbidden_thing_tx,
+            )
+        }), async move |s| {
             // Separate variable to keep the closure alive until opening completed
-            s.set_maker(move |(transaction, event): (IdbTransaction, VersionChangeEvent<Err>)| {
-                let fut = async move {
-                    ran_upgrade_cb.set(true);
-                    on_upgrade_needed(event).await
-                };
-                unsafe_jar::RunnableTransaction::new(
-                    transaction,
-                    fut,
-                    upgrade_res_tx,
-                    polled_forbidden_thing_tx,
-                )
-            });
             let on_upgrade_needed = Closure::once(move |evt: IdbVersionChangeEvent| {
                 let evt = VersionChangeEvent::from_sys(evt);
                 let transaction = evt.transaction().as_sys().clone();
