@@ -11,6 +11,7 @@ use web_sys::{
 };
 
 pub(crate) mod unsafe_jar;
+pub(crate) mod unsafe_jar2;
 
 /// Wrapper for [`IDBTransaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
 #[derive(Debug)]
@@ -112,40 +113,23 @@ impl<Err> TransactionBuilder<Err> {
                 Some("InvalidAccessError") => crate::Error::InvalidArgument,
                 _ => crate::Error::from_js_value(err),
             })?;
-        let (tx, rx) = futures_channel::oneshot::channel();
+        let fut_res = std::cell::Cell::new(None);
         let fut = {
             let t = t.clone();
+            let fut_res = &fut_res;
             async move {
                 let res = transaction(Transaction::from_sys(t.clone())).await;
                 let return_value = match &res {
                     Ok(_) => Ok(()),
                     Err(_) => Err(()),
                 };
-                if let Err(_) = tx.send(res) {
-                    // Transaction was cancelled by being dropped, abort it
-                    let _ = t.abort();
-                }
+                fut_res.set(Some(res));
                 return_value
             }
         };
 
-        let fut_pin = std::pin::pin!(fut);
-        let fut_pin_with_dyn_dispatch: std::pin::Pin<&mut dyn std::future::Future<Output=Result<(), ()>>> = fut_pin;
-        // SAFETY: this is fine as long as we don't return from the current function since
-        // the future is pinned here.
-        let fut_pin_with_dyn_dispatch_and_static_lifetime: std::pin::Pin<&'static mut dyn std::future::Future<Output=Result<(), ()>>> = unsafe { std::mem::transmute(fut_pin_with_dyn_dispatch) };
-        // TODO: A possible safety could be added to ensure the future is not polled after
-        // the current function has returned (which would cause UB).
-        // The idea would be to check `tx.is_cancelled()` is false before polling the
-        // `Pin<&dyn Future> reference on the future (since this check indicates that `rx`
-        // still exists, which itself lives in this function just like our pinned future).
-
-        unsafe_jar::run(t, fut_pin_with_dyn_dispatch_and_static_lifetime);
-        let res = rx.await;
-        if unsafe_jar::POLLED_FORBIDDEN_THING.get() {
-            panic!("Transaction blocked without any request under way");
-        }
-        res.expect("Transaction never completed")
+        unsafe_jar2::run(t, fut).await;
+        fut_res.into_inner().expect("Transaction never completed")
     }
 }
 
@@ -157,7 +141,7 @@ pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsVa
     let (error_tx, error_rx) = oneshot::channel();
 
     // Keep the callbacks alive until execution completed
-    let _callbacks = unsafe_jar::add_request(req, success_tx, error_tx);
+    let _callbacks = unsafe_jar2::add_request(req, success_tx, error_tx);
 
     let res = match future::select(success_rx, error_rx).await {
         Either::Left((res, _)) => Ok(res.unwrap()),
