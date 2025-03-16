@@ -1,5 +1,5 @@
 use crate::{
-    database::OwnedDatabase, transaction::runner, utils::generic_request,
+    database::OwnedDatabase, transaction::unsafe_jar, utils::generic_request,
     utils::str_slice_to_array, Database, ObjectStore, Transaction,
 };
 use futures_channel::oneshot;
@@ -124,7 +124,7 @@ impl Factory {
                 ran_upgrade_cb_clone.set(true);
                 on_upgrade_needed(evt).await
             };
-            runner::run(runner::RunnableTransaction::new(
+            unsafe_jar::run(unsafe_jar::RunnableTransaction::new(
                 transaction,
                 fut,
                 upgrade_res_tx,
