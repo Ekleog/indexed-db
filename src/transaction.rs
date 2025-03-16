@@ -3,7 +3,6 @@ use crate::{
     ObjectStore,
 };
 use futures_channel::oneshot;
-use futures_util::future::{self, Either};
 use std::marker::PhantomData;
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
@@ -135,25 +134,24 @@ pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsVa
     // TODO: remove these oneshot-channel in favor of a custom-made atomiccell-based channel.
     // the custom-made channel will not call the waker (because we're handling wakes another way),
     // which'll allow using a panicking context again.
-    let (success_tx, success_rx) = oneshot::channel();
-    let (error_tx, error_rx) = oneshot::channel();
+    let (success_tx, mut success_rx) = oneshot::channel();
+    let (error_tx, mut error_rx) = oneshot::channel();
 
     // Keep the callbacks alive until execution completed
+    // This also means that the tx's will not be dropped, hence the below unwraps
     let _callbacks = runner::add_request(req, success_tx, error_tx);
 
-    let res = match future::select(success_rx, error_rx).await {
-        Either::Left((res, _)) => Ok(res.unwrap()),
-        Either::Right((res, _)) => Err(res.unwrap()),
-    };
-
-    res.map_err(|evt| err_from_event(evt).into()).map(|evt| {
-        evt.target()
-            .expect("Trying to parse indexed_db::Error from an event that has no target")
-            .dyn_into::<web_sys::IdbRequest>()
-            .expect(
-                "Trying to parse indexed_db::Error from an event that is not from an IDBRequest",
-            )
-            .result()
-            .expect("Failed retrieving the result of successful IDBRequest")
-    })
+    futures_util::select! {
+        success_res = success_rx => {
+            let evt = success_res.unwrap();
+            let result = evt.target()
+                .expect("Trying to parse indexed_db::Error from an event that has no target")
+                .dyn_into::<web_sys::IdbRequest>()
+                .expect("Trying to parse indexed_db::Error from an event that is not from an IDBRequest")
+                .result()
+                .expect("Failed retrieving the result of successful IDBRequest");
+            Ok(result)
+        }
+        error_res = error_rx => Err(err_from_event(error_res.unwrap()).into()),
+    }
 }
