@@ -23,23 +23,24 @@ use web_sys::{
     IdbRequest, IdbTransaction,
 };
 
-#[derive(Clone)]
+pub struct PolledForbiddenThing;
+
 struct State {
     transaction: IdbTransaction,
-    // Avoiding the two Rc here with a single big Rc would require the coerce_unsized feature
-    inflight_requests: Rc<Cell<usize>>,
-    future: Rc<RefCell<Pin<Box<dyn 'static + Future<Output = Result<(), ()>>>>>>,
+    inflight_requests: Cell<usize>,
+    future: RefCell<Pin<Box<dyn 'static + Future<Output = ()>>>>,
+    send_polled_forbidden_thing_to: RefCell<Option<oneshot::Sender<PolledForbiddenThing>>>,
 }
 
-scoped_thread_local!(static CURRENT: State);
-thread_local!(pub(crate) static POLLED_FORBIDDEN_THING: Cell<bool> = Cell::new(false));
+scoped_thread_local!(static CURRENT: Rc<State>);
 
-fn poll_it(state: &State) {
+fn poll_it(state: &Rc<State>) {
     CURRENT.set(&state, || {
         // Poll once, in order to run the transaction until its next await on a request
-        let mut transaction_fut = state.future.borrow_mut();
-        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-            transaction_fut
+        let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            state
+                .future
+                .borrow_mut()
                 .as_mut()
                 .poll(&mut Context::from_waker(&noop_waker()))
         }));
@@ -65,39 +66,48 @@ fn poll_it(state: &State) {
                     // an `await` on something other than transaction requests. Abort in order to
                     // avoid the default auto-commit behavior.
                     let _ = state.transaction.abort();
-                    POLLED_FORBIDDEN_THING.set(true);
+                    let _ = state
+                        .send_polled_forbidden_thing_to
+                        .borrow_mut()
+                        .take()
+                        .map(|tx| tx.send(PolledForbiddenThing));
                     panic!("Transaction blocked without any request under way");
                 }
             }
-            Poll::Ready(Ok(())) => {
+            Poll::Ready(()) => {
                 // Everything went well! We can ignore this
-            }
-            Poll::Ready(Err(())) => {
-                // The transaction failed. We should abort it.
-                let _ = state.transaction.abort();
             }
         }
     });
 }
 
-fn send_or_abort<T>(transaction: &IdbTransaction, tx: oneshot::Sender<T>, value: T) {
-    if tx.send(value).is_err() {
-        // Cancelled transaction by not awaiting on it. Abort the transaction if it has not
-        // been aborted already.
-        let _ = transaction.abort();
-    }
-}
-
-pub fn run<Fut>(transaction: IdbTransaction, transaction_contents: Fut)
-where
-    Fut: 'static + Future<Output = Result<(), ()>>,
+pub fn run<Fut, R, E>(
+    transaction: IdbTransaction,
+    transaction_contents: Fut,
+    send_res_to: oneshot::Sender<Result<R, E>>,
+    send_polled_forbidden_thing_to: oneshot::Sender<PolledForbiddenThing>,
+) where
+    Fut: 'static + Future<Output = Result<R, E>>,
+    R: 'static,
+    E: 'static,
 {
     let state = State {
-        transaction,
-        inflight_requests: Rc::new(Cell::new(0)),
-        future: Rc::new(RefCell::new(Box::pin(transaction_contents))),
+        transaction: transaction.clone(),
+        inflight_requests: Cell::new(0),
+        future: RefCell::new(Box::pin(async move {
+            let result = transaction_contents.await;
+            if result.is_err() {
+                // The transaction failed. We should abort it.
+                let _ = transaction.abort();
+            }
+            if send_res_to.send(result).is_err() {
+                // Transaction was cancelled by being dropped, abort it
+                let _ = transaction.abort();
+            }
+        })),
+        send_polled_forbidden_thing_to: RefCell::new(Some(send_polled_forbidden_thing_to)),
     };
-    poll_it(&state as _);
+    poll_it(&Rc::new(state));
 }
 
 pub fn add_request(
@@ -116,7 +126,11 @@ pub fn add_request(
                 state
                     .inflight_requests
                     .set(state.inflight_requests.get() - 1);
-                send_or_abort(&state.transaction, success_tx, evt);
+                if success_tx.send(evt).is_err() {
+                    // Cancelled transaction by not awaiting on it. Abort the transaction if it has not
+                    // been aborted already.
+                    let _ = state.transaction.abort();
+                }
                 poll_it(&state);
             }
         });
@@ -124,13 +138,16 @@ pub fn add_request(
         let on_error = Closure::once({
             let state = state.clone();
             move |evt: web_sys::Event| {
+                evt.prevent_default(); // Do not abort the transaction, we're dealing with it ourselves
                 state
                     .inflight_requests
                     .set(state.inflight_requests.get() - 1);
-                send_or_abort(&state.transaction, error_tx, evt.clone());
+                if error_tx.send(evt).is_err() {
+                    // Cancelled transaction by not awaiting on it. Abort the transaction if it has not
+                    // been aborted already.
+                    let _ = state.transaction.abort();
+                }
                 poll_it(&state);
-                // The poll completed without panicking. Make the error not abort the transaction.
-                evt.prevent_default();
             }
         });
 

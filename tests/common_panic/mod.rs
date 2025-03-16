@@ -3,13 +3,8 @@ use indexed_db::Factory;
 use wasm_bindgen_test::wasm_bindgen_test;
 use web_sys::js_sys::JsString;
 
-// Currently, panic=abort, so the sender is never Drop'd in the callback handlers.
-// As such, despite the proper error message being displayed by the console error
-// panic hook, `should_panic` never detects it due to the deadlock happening first.
-// This is acceptable behavior for us still.
 #[wasm_bindgen_test]
-#[ignore]
-#[should_panic(expected = "Transaction blocked without any request under way")]
+#[should_panic] // For some reason the error message is not detected here, but appears clearly with console_error_panic_hook
 async fn other_awaits_panic() {
     // tracing_wasm::set_as_global_default();
     // std::panic::set_hook(Box::new(console_error_panic_hook::hook));

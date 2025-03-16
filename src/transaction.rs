@@ -115,28 +115,19 @@ impl<Err> TransactionBuilder<Err> {
                 Some("InvalidAccessError") => crate::Error::InvalidArgument,
                 _ => crate::Error::from_js_value(err),
             })?;
-        let (tx, rx) = futures_channel::oneshot::channel();
-        let fut = {
-            let t = t.clone();
-            async move {
-                let res = transaction(Transaction::from_sys(t.clone())).await;
-                let return_value = match &res {
-                    Ok(_) => Ok(()),
-                    Err(_) => Err(()),
-                };
-                if let Err(_) = tx.send(res) {
-                    // Transaction was cancelled by being dropped, abort it
-                    let _ = t.abort();
-                }
-                return_value
-            }
-        };
-        runner::run(t, fut);
-        let res = rx.await;
-        if runner::POLLED_FORBIDDEN_THING.get() {
-            panic!("Transaction blocked without any request under way");
+        let (result_tx, mut result_rx) = futures_channel::oneshot::channel();
+        let (polled_forbidden_thing_tx, mut polled_forbidden_thing_rx) =
+            futures_channel::oneshot::channel();
+        runner::run(
+            t.clone(),
+            transaction(Transaction::from_sys(t)),
+            result_tx,
+            polled_forbidden_thing_tx,
+        );
+        futures_util::select! {
+            res = result_rx => res.expect("Transaction never completed"),
+            _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
         }
-        res.expect("Transaction never completed")
     }
 }
 

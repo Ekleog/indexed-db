@@ -1,10 +1,7 @@
 use crate::{transaction::runner, utils::generic_request, Database, Transaction};
 use futures_channel::oneshot;
-use futures_util::{
-    future::{self, Either},
-    pin_mut, FutureExt,
-};
-use std::marker::PhantomData;
+use futures_util::{pin_mut, FutureExt};
+use std::{cell::Cell, marker::PhantomData, rc::Rc};
 use web_sys::{
     js_sys::{self, Function},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
@@ -112,49 +109,36 @@ impl<Err: 'static> Factory<Err> {
             .open_with_u32(name, version)
             .map_err(crate::Error::from_js_value)?;
 
-        let (upgrade_tx, upgrade_rx) = oneshot::channel();
+        let (upgrade_res_tx, mut upgrade_res_rx) = oneshot::channel();
+        let (polled_forbidden_thing_tx, mut polled_forbidden_thing_rx) = oneshot::channel();
+        let ran_upgrade_cb = Rc::new(Cell::new(false));
+        let ran_upgrade_cb_clone = ran_upgrade_cb.clone();
+        // Separate variable to keep the closure alive until opening completed
         let on_upgrade_needed = Closure::once(move |evt: IdbVersionChangeEvent| {
             let evt = VersionChangeEvent::from_sys(evt);
             let transaction = evt.transaction().as_sys().clone();
-            let fut = {
-                let transaction = transaction.clone();
-                async move {
-                    let res = on_upgrade_needed(evt).await;
-                    let return_value = match &res {
-                        Ok(_) => Ok(()),
-                        Err(_) => Err(()),
-                    };
-                    if let Err(_) = upgrade_tx.send(res) {
-                        // Opening request was cancelled by dropping, abort the transaction
-                        let _ = transaction.abort();
-                    }
-                    return_value
-                }
+            let fut = async move {
+                ran_upgrade_cb_clone.set(true);
+                on_upgrade_needed(evt).await
             };
-            runner::run(transaction, fut);
+            runner::run(transaction, fut, upgrade_res_tx, polled_forbidden_thing_tx);
         });
         open_req.set_onupgradeneeded(Some(
             on_upgrade_needed.as_ref().dyn_ref::<Function>().unwrap(),
         ));
 
-        let completion_fut = generic_request(open_req.clone().into());
-        pin_mut!(completion_fut);
-
-        let res = future::select(upgrade_rx, completion_fut).await;
-        if runner::POLLED_FORBIDDEN_THING.get() {
-            panic!("Transaction blocked without any request under way");
-        }
-
-        match res {
-            Either::Right((completion, _)) => {
-                completion.map_err(crate::Error::from_js_event)?;
-            }
-            Either::Left((upgrade_res, completion_fut)) => {
-                let upgrade_res = upgrade_res.expect("Closure dropped before its end of scope");
-                upgrade_res?;
-                completion_fut.await.map_err(crate::Error::from_js_event)?;
+        let completion_res = generic_request(open_req.clone().into()).await;
+        if ran_upgrade_cb.get() {
+            // The upgrade callback was run, so we need to wait for its result to reach us
+            futures_util::select! {
+                upgrade_res = upgrade_res_rx => {
+                    let upgrade_res = upgrade_res.expect("Closure dropped before its end of scope");
+                    upgrade_res?;
+                },
+                _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
             }
         }
+        completion_res.map_err(crate::Error::from_js_event)?;
 
         let db = open_req
             .result()
