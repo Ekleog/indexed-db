@@ -8,11 +8,12 @@
 //! The API exposed from here is entirely safe, and this module's code should be properly audited.
 
 use futures_channel::oneshot;
-use futures_util::task::noop_waker;
+use futures_util::{task::noop_waker, FutureExt};
 use scoped_tls::scoped_thread_local;
 use std::{
     cell::{Cell, RefCell},
     future::Future,
+    panic::AssertUnwindSafe,
     pin::Pin,
     rc::Rc,
     task::{Context, Poll},
@@ -25,23 +26,23 @@ use web_sys::{
 
 pub struct PolledForbiddenThing;
 
-pub struct RunnableTransaction {
+pub struct RunnableTransaction<'f> {
     transaction: IdbTransaction,
     inflight_requests: Cell<usize>,
-    future: RefCell<Pin<Box<dyn 'static + Future<Output = ()>>>>,
+    future: RefCell<Pin<Box<dyn 'f + Future<Output = ()>>>>,
     send_polled_forbidden_thing_to: RefCell<Option<oneshot::Sender<PolledForbiddenThing>>>,
 }
 
-impl RunnableTransaction {
+impl<'f> RunnableTransaction<'f> {
     pub fn new<R, E>(
         transaction: IdbTransaction,
-        transaction_contents: impl 'static + Future<Output = Result<R, E>>,
+        transaction_contents: impl 'f + Future<Output = Result<R, E>>,
         send_res_to: oneshot::Sender<Result<R, E>>,
         send_polled_forbidden_thing_to: oneshot::Sender<PolledForbiddenThing>,
-    ) -> RunnableTransaction
+    ) -> RunnableTransaction<'f>
     where
-        R: 'static,
-        E: 'static,
+        R: 'f,
+        E: 'f,
     {
         RunnableTransaction {
             transaction: transaction.clone(),
@@ -62,9 +63,9 @@ impl RunnableTransaction {
     }
 }
 
-scoped_thread_local!(static CURRENT: Rc<RunnableTransaction>);
+scoped_thread_local!(static CURRENT: Rc<RunnableTransaction<'static>>);
 
-fn poll_it(state: &Rc<RunnableTransaction>) {
+fn poll_it(state: &Rc<RunnableTransaction<'static>>) {
     CURRENT.set(&state, || {
         // Poll once, in order to run the transaction until its next await on a request
         let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -111,8 +112,47 @@ fn poll_it(state: &Rc<RunnableTransaction>) {
     });
 }
 
-pub fn run(state: RunnableTransaction) {
-    poll_it(&Rc::new(state));
+pub fn run(state: RunnableTransaction<'static>) {
+    let state = Rc::new(state);
+    poll_it(&state);
+}
+
+/// Panics and aborts the whole process if the transaction is not dropped before the end of `must_be_dropped_before`
+pub async fn extend_lifetime_and_run<'f, R>(
+    state: RunnableTransaction<'f>,
+    must_be_dropped_before: impl AsyncFnOnce() -> R,
+) -> R {
+    // SAFETY: We're extending the lifetime of `state` to `'static`.
+    // This is safe because the `RunnableTransaction` is not stored anywhere else, and it will be dropped
+    // before the end of the `must_be_dropped_before` future.
+    // If it is not, we'll panic and abort the whole process.
+    // The `Rc::strong_count` check is there to ensure that the transaction is dropped before the end of its lifetime.
+    let state: RunnableTransaction<'static> = unsafe { std::mem::transmute(state) };
+    let state = Rc::new(state);
+    // Abort on panic if there's remaining references, there's nothing recoverable if we overextended the lifetime
+    let result = AssertUnwindSafe(async {
+        poll_it(&state);
+        let result = must_be_dropped_before().await;
+        // Note: we know this won't spuriously hit because:
+        // - we're having `Rc`, so every `RunnableTransaction` operation is single-thread anyway
+        // - when `must_be_dropped_before` completes, at least `result_rx` or `polled_forbidden_thing_rx` will have resolved
+        // - either of these channels being written to, means that the `RunnableTransaction` has been dropped
+        // Point 2 is enforced outside of the unsafe jar, but it's fine considering it will only result in a spurious panic/abort
+        if Rc::strong_count(&state) != 1 {
+            panic!("Bug in the indexed-db crate: the transaction was not dropped before the end of its lifetime");
+        }
+        result
+    })
+    .catch_unwind()
+    .await;
+    if Rc::strong_count(&state) != 1 {
+        // Make sure we abort regardless of what the user could be doing, if we're overextending the lifetime we'll also panic
+        std::process::abort();
+    }
+    match result {
+        Ok(result) => result,
+        Err(err) => std::panic::resume_unwind(err),
+    }
 }
 
 pub fn add_request(

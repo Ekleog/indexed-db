@@ -363,3 +363,46 @@ async fn typed_array_keys() {
         .await
         .unwrap();
 }
+
+#[wasm_bindgen_test]
+async fn borrowing_transaction() {
+    let factory = Factory::<()>::get().unwrap();
+
+    let db = factory
+        .open("foo42", 1, async move |evt| {
+            let db = evt.database();
+            db.build_object_store("data").create()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let data_from_outside = String::from("superlargedata");
+    db.transaction(&["data"])
+        .rw()
+        .run(async |t| {
+            let data = t.object_store("data")?;
+            data.add_kv(
+                &JsString::from("data"),
+                &JsString::from(&data_from_outside as &str),
+            )
+            .await?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    db.transaction(&["data"])
+        .run(async |t| {
+            let data = t.object_store("data")?;
+            assert_eq!(
+                data.get(&JsString::from("data"))
+                    .await?
+                    .unwrap()
+                    .as_string()
+                    .unwrap(),
+                data_from_outside
+            );
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
