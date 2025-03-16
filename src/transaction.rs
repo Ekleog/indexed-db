@@ -111,14 +111,15 @@ impl TransactionBuilder {
         let (result_tx, mut result_rx) = futures_channel::oneshot::channel();
         let (polled_forbidden_thing_tx, mut polled_forbidden_thing_rx) =
             futures_channel::oneshot::channel();
-        unsafe_jar::extend_lifetime_and_run(
-            unsafe_jar::RunnableTransaction::new(
+        unsafe_jar::extend_lifetime_to_scope_and_run(
+            Box::new(move |()| unsafe_jar::RunnableTransaction::new(
                 t.clone(),
                 transaction(Transaction::from_sys(t)),
                 result_tx,
                 polled_forbidden_thing_tx,
-            ),
-            async move || {
+            )),
+            async move |s| {
+                s.run(());
                 futures_util::select! {
                     res = result_rx => res.expect("Transaction never completed"),
                     _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
