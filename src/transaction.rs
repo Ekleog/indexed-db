@@ -134,6 +134,8 @@ pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsVa
     // TODO: remove these oneshot-channel in favor of a custom-made atomiccell-based channel.
     // the custom-made channel will not call the waker (because we're handling wakes another way),
     // which'll allow using a panicking context again.
+    // The custom channel can just be a Mutex<Either<Pending, Ready<T>>>, where fulfilling it switches
+    // the contained future between pending and ready.
     let (success_tx, mut success_rx) = oneshot::channel();
     let (error_tx, mut error_rx) = oneshot::channel();
 
