@@ -1,5 +1,4 @@
 use crate::{transaction::unsafe_jar, utils::generic_request, Database, Transaction};
-use futures_channel::oneshot;
 use futures_util::{
     future::{self, Either},
     pin_mut, FutureExt,
@@ -101,7 +100,7 @@ impl<Err: 'static> Factory<Err> {
         &self,
         name: &str,
         version: u32,
-        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
+        on_upgrade_needed: impl AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
     ) -> crate::Result<Database<Err>, Err> {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
@@ -112,26 +111,31 @@ impl<Err: 'static> Factory<Err> {
             .open_with_u32(name, version)
             .map_err(crate::Error::from_js_value)?;
 
-        let (upgrade_tx, upgrade_rx) = oneshot::channel();
+        let on_upgrade_evt = std::rc::Rc::new(std::cell::Cell::new(None));
+        let on_upgrade_fut_res = std::cell::Cell::new(None);
+        let on_upgrade_fut = {
+            let on_upgrade_evt = on_upgrade_evt.clone();
+            let on_upgrade_fut_res = &on_upgrade_fut_res;
+            async move || {
+                let evt = on_upgrade_evt.take().expect("Event not set");
+                let res = on_upgrade_needed(evt).await;
+                let return_value = match &res {
+                    Ok(_) => Ok(()),
+                    Err(_) => Err(()),
+                };
+                on_upgrade_fut_res.set(Some(res));
+                return_value
+            }
+        };
+        let on_upgrade_fut_pinned = std::pin::pin!(on_upgrade_fut());
+
+        let (on_upgrade_deffered, start_on_upgrade_deffered_cb) = unsafe_jar::DeferredRunning::new(on_upgrade_fut_pinned);
+
         let on_upgrade_needed = Closure::once(move |evt: IdbVersionChangeEvent| {
             let evt = VersionChangeEvent::from_sys(evt);
             let transaction = evt.transaction().as_sys().clone();
-            let fut = {
-                let transaction = transaction.clone();
-                async move {
-                    let res = on_upgrade_needed(evt).await;
-                    let return_value = match &res {
-                        Ok(_) => Ok(()),
-                        Err(_) => Err(()),
-                    };
-                    if let Err(_) = upgrade_tx.send(res) {
-                        // Opening request was cancelled by dropping, abort the transaction
-                        let _ = transaction.abort();
-                    }
-                    return_value
-                }
-            };
-            unsafe_jar::run(transaction, fut);
+            on_upgrade_evt.set(Some(evt));
+            start_on_upgrade_deffered_cb(transaction);
         });
         open_req.set_onupgradeneeded(Some(
             on_upgrade_needed.as_ref().dyn_ref::<Function>().unwrap(),
@@ -140,17 +144,17 @@ impl<Err: 'static> Factory<Err> {
         let completion_fut = generic_request(open_req.clone().into());
         pin_mut!(completion_fut);
 
-        let res = future::select(upgrade_rx, completion_fut).await;
-        if unsafe_jar::POLLED_FORBIDDEN_THING.get() {
-            panic!("Transaction blocked without any request under way");
-        }
+        let on_upgrade_completion_fut = on_upgrade_deffered.wait();
+        pin_mut!(on_upgrade_completion_fut);
+
+        let res = future::select(on_upgrade_completion_fut, completion_fut).await;
 
         match res {
             Either::Right((completion, _)) => {
                 completion.map_err(crate::Error::from_js_event)?;
             }
-            Either::Left((upgrade_res, completion_fut)) => {
-                let upgrade_res = upgrade_res.expect("Closure dropped before its end of scope");
+            Either::Left(((), completion_fut)) => {
+                let upgrade_res = on_upgrade_fut_res.take().expect("Closure dropped before its end of scope");
                 upgrade_res?;
                 completion_fut.await.map_err(crate::Error::from_js_event)?;
             }

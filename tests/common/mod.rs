@@ -214,16 +214,49 @@ async fn smoke_test() {
         })
         .await
         .unwrap();
+}
 
-    // Run a non-static async function
+#[wasm_bindgen_test]
+async fn non_static_async_closures() {
+    let factory = Factory::<()>::get().unwrap();
+
+    factory.delete_database("foo2").await.unwrap();
+
+    // Test `Factory::open`
+
+    let store_name = "objects".to_string();
+    let store_name_ref = store_name.as_ref();
+    let closure_called = std::cell::Cell::new(false);
+    let closure_called_ref = &closure_called;
+
+    let db = factory
+        .open("foo2", 1, async move |evt| {
+            closure_called_ref.set(true);
+
+            let db = evt.database();
+            db.build_object_store(store_name_ref).auto_increment().create()?;
+
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    assert!(closure_called.get(), "on update closure not called !");
+
+    // Test `Database::transaction`
+
     let key = "key2".to_string();
     let value = "value2".to_string();
     let key_ref = key.as_ref();
     let value_ref = value.as_ref();
+    let closure_called = std::cell::Cell::new(false);
+    let closure_called_ref = &closure_called;
 
     db.transaction(&["objects"])
         .rw()
         .run(async move |t| {
+            closure_called_ref.set(true);
+
             let objects = t.object_store("objects")?;
 
             objects
@@ -236,6 +269,8 @@ async fn smoke_test() {
 
             Ok(())
     }).await.unwrap();
+
+    assert!(closure_called.get(), "transaction closure not called !");
 }
 
 #[wasm_bindgen_test]
