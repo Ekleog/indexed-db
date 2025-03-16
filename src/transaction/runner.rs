@@ -1,4 +1,9 @@
-//! Module used for extracting the `unsafe` implementation details of `transaction`
+//! All the required to run a transaction
+//!
+//! Originally, this module was used for extracting the `unsafe` implementation details of `transaction`.
+//! Since then, all the code here has been made safe.
+//! However, it is possible that in the future, we'll need more unsafe code, in which case it would likely
+//! have to come here.
 //!
 //! The API exposed from here is entirely safe, and this module's code should be properly audited.
 
@@ -23,7 +28,7 @@ struct State {
     transaction: IdbTransaction,
     // Avoiding the two Rc here with a single big Rc would require the coerce_unsized feature
     inflight_requests: Rc<Cell<usize>>,
-    future: Rc<RefCell<dyn 'static + Future<Output = Result<(), ()>>>>,
+    future: Rc<RefCell<Pin<Box<dyn 'static + Future<Output = Result<(), ()>>>>>>,
 }
 
 scoped_thread_local!(static CURRENT: State);
@@ -33,14 +38,10 @@ fn poll_it(state: &State) {
     CURRENT.set(&state, || {
         // Poll once, in order to run the transaction until its next await on a request
         let mut transaction_fut = state.future.borrow_mut();
-        let transaction_fut = unsafe {
-            // SAFETY: `transaction` will never leave the `Rc` it was put in.
-            // Only this file has access to the internals of the `Rc`.
-            // In addition, it will never be mutated except in this `Pin`.
-            Pin::new_unchecked(&mut *transaction_fut)
-        };
         let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-            transaction_fut.poll(&mut Context::from_waker(&noop_waker()))
+            transaction_fut
+                .as_mut()
+                .poll(&mut Context::from_waker(&noop_waker()))
         }));
 
         // Try catching the panic and aborting. This currently does not work in wasm due to panic=abort, but will
@@ -94,7 +95,7 @@ where
     let state = State {
         transaction,
         inflight_requests: Rc::new(Cell::new(0)),
-        future: Rc::new(RefCell::new(transaction_contents)),
+        future: Rc::new(RefCell::new(Box::pin(transaction_contents))),
     };
     poll_it(&state as _);
 }

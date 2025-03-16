@@ -10,7 +10,7 @@ use web_sys::{
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
 };
 
-pub(crate) mod unsafe_jar;
+pub(crate) mod runner;
 
 /// Wrapper for [`IDBTransaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
 #[derive(Debug)]
@@ -131,9 +131,9 @@ impl<Err> TransactionBuilder<Err> {
                 return_value
             }
         };
-        unsafe_jar::run(t, fut);
+        runner::run(t, fut);
         let res = rx.await;
-        if unsafe_jar::POLLED_FORBIDDEN_THING.get() {
+        if runner::POLLED_FORBIDDEN_THING.get() {
             panic!("Transaction blocked without any request under way");
         }
         res.expect("Transaction never completed")
@@ -148,7 +148,7 @@ pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsVa
     let (error_tx, error_rx) = oneshot::channel();
 
     // Keep the callbacks alive until execution completed
-    let _callbacks = unsafe_jar::add_request(req, success_tx, error_tx);
+    let _callbacks = runner::add_request(req, success_tx, error_tx);
 
     let res = match future::select(success_rx, error_rx).await {
         Either::Left((res, _)) => Ok(res.unwrap()),

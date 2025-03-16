@@ -1,4 +1,4 @@
-use crate::{transaction::unsafe_jar, utils::generic_request, Database, Transaction};
+use crate::{transaction::runner, utils::generic_request, Database, Transaction};
 use futures_channel::oneshot;
 use futures_util::{
     future::{self, Either},
@@ -131,7 +131,7 @@ impl<Err: 'static> Factory<Err> {
                     return_value
                 }
             };
-            unsafe_jar::run(transaction, fut);
+            runner::run(transaction, fut);
         });
         open_req.set_onupgradeneeded(Some(
             on_upgrade_needed.as_ref().dyn_ref::<Function>().unwrap(),
@@ -141,7 +141,7 @@ impl<Err: 'static> Factory<Err> {
         pin_mut!(completion_fut);
 
         let res = future::select(upgrade_rx, completion_fut).await;
-        if unsafe_jar::POLLED_FORBIDDEN_THING.get() {
+        if runner::POLLED_FORBIDDEN_THING.get() {
             panic!("Transaction blocked without any request under way");
         }
 
