@@ -100,11 +100,8 @@ impl<Err> TransactionBuilder<Err> {
     //   untested and unsupported code path.
     pub async fn run<Ret>(
         self,
-        transaction: impl 'static + AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err>,
+        transaction: impl AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err>,
     ) -> crate::Result<Ret, Err>
-    where
-        Ret: 'static,
-        Err: 'static,
     {
         let t = self
             .db
@@ -131,7 +128,19 @@ impl<Err> TransactionBuilder<Err> {
                 return_value
             }
         };
-        unsafe_jar::run(t, fut);
+
+        let fut_pin = std::pin::pin!(fut);
+        let fut_pin_with_dyn_dispatch: std::pin::Pin<&mut dyn std::future::Future<Output=Result<(), ()>>> = fut_pin;
+        // SAFETY: this is fine as long as we don't return from the current function since
+        // the future is pinned here.
+        let fut_pin_with_dyn_dispatch_and_static_lifetime: std::pin::Pin<&'static mut dyn std::future::Future<Output=Result<(), ()>>> = unsafe { std::mem::transmute(fut_pin_with_dyn_dispatch) };
+        // TODO: A possible safety could be added to ensure the future is not polled after
+        // the current function has returned (which would cause UB).
+        // The idea would be to check `tx.is_cancelled()` is false before polling the
+        // `Pin<&dyn Future> reference on the future (since this check indicates that `rx`
+        // still exists, which itself lives in this function just like our pinned future).
+
+        unsafe_jar::run(t, fut_pin_with_dyn_dispatch_and_static_lifetime);
         let res = rx.await;
         if unsafe_jar::POLLED_FORBIDDEN_THING.get() {
             panic!("Transaction blocked without any request under way");

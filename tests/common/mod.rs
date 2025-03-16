@@ -214,6 +214,28 @@ async fn smoke_test() {
         })
         .await
         .unwrap();
+
+    // Run a non-static async function
+    let key = "key2".to_string();
+    let value = "value2".to_string();
+    let key_ref = key.as_ref();
+    let value_ref = value.as_ref();
+
+    db.transaction(&["objects"])
+        .rw()
+        .run(async move |t| {
+            let objects = t.object_store("objects")?;
+
+            objects
+                .add_kv(&JsString::from(key_ref), &JsString::from(value_ref))
+                .await?;
+            assert_eq!(
+                objects.get(&JsString::from(key_ref)).await?.unwrap(),
+                **JsString::from(value_ref)
+            );
+
+            Ok(())
+    }).await.unwrap();
 }
 
 #[wasm_bindgen_test]
