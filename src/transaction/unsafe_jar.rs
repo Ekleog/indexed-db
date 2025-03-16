@@ -11,11 +11,12 @@ use futures_channel::oneshot;
 use futures_util::{task::noop_waker, FutureExt};
 use scoped_tls::scoped_thread_local;
 use std::{
-    cell::{Cell, RefCell},
+    cell::{Cell, OnceCell, RefCell},
     future::Future,
+    marker::PhantomData,
     panic::AssertUnwindSafe,
     pin::Pin,
-    rc::Rc,
+    rc::{Rc, Weak},
     task::{Context, Poll},
 };
 use web_sys::{
@@ -112,42 +113,64 @@ fn poll_it(state: &Rc<RunnableTransaction<'static>>) {
     });
 }
 
-pub fn run(state: RunnableTransaction<'static>) {
-    let state = Rc::new(state);
-    poll_it(&state);
+pub struct ScopeCallback<'scope, Args> {
+    state: Rc<OnceCell<Weak<RunnableTransaction<'static>>>>,
+    maker: Option<Box<dyn 'static + FnOnce(Args) -> RunnableTransaction<'static>>>,
+
+    // 'static itself, but also invariant in 'scope
+    // See the definition of std::thread::Scope for why invariance is important.
+    _phantom: PhantomData<fn(&'scope ()) -> &'scope ()>,
+}
+
+impl<'scope, Args> ScopeCallback<'scope, Args> {
+    pub fn set_maker(&mut self, maker: impl 'scope + FnOnce(Args) -> RunnableTransaction<'scope>) {
+        // TODO: this is not safe, but can be made safe by adjusting the Rc checks
+        let maker: Box<dyn 'scope + FnOnce(Args) -> RunnableTransaction<'scope>> = Box::new(maker);
+        let maker: Box<dyn 'static + FnOnce(Args) -> RunnableTransaction<'static>> =
+            unsafe { std::mem::transmute(maker) };
+        self.maker = Some(maker);
+    }
+
+    pub fn run(mut self, args: Args) {
+        let maker = self.maker.take().expect("Bug in the indexed-db crate: called ScopeCallback::run without calling ScopeCallback::set_maker first");
+        let state: RunnableTransaction<'static> = (maker)(args);
+        // SAFETY: We're extending the lifetime of `state` to `'static`.
+        // This is safe because the `RunnableTransaction` is not stored anywhere else, and it will be dropped
+        // before the end of the enclosing `extend_lifetime_to_scope_and_run` call, at the `Weak::strong_count` check.
+        // If it is not, we'll panic and abort the whole process.
+        // `'scope` is also guaranteed to outlive `extend_lifetime_to_scope_and_run`.
+        let state: RunnableTransaction<'static> = unsafe { std::mem::transmute(state) };
+        let state = Rc::new(state);
+        let _ = self.state.set(Rc::downgrade(&state));
+        poll_it(&state);
+    }
 }
 
 /// Panics and aborts the whole process if the transaction is not dropped before the end of `must_be_dropped_before`
-pub async fn extend_lifetime_and_run<'f, R>(
-    state: RunnableTransaction<'f>,
-    must_be_dropped_before: impl AsyncFnOnce() -> R,
-) -> R {
-    // SAFETY: We're extending the lifetime of `state` to `'static`.
-    // This is safe because the `RunnableTransaction` is not stored anywhere else, and it will be dropped
-    // before the end of the `must_be_dropped_before` future.
-    // If it is not, we'll panic and abort the whole process.
-    // The `Rc::strong_count` check is there to ensure that the transaction is dropped before the end of its lifetime.
-    let state: RunnableTransaction<'static> = unsafe { std::mem::transmute(state) };
-    let state = Rc::new(state);
-    // Abort on panic if there's remaining references, there's nothing recoverable if we overextended the lifetime
-    let result = AssertUnwindSafe(async {
-        poll_it(&state);
-        let result = must_be_dropped_before().await;
-        // Note: we know this won't spuriously hit because:
-        // - we're having `Rc`, so every `RunnableTransaction` operation is single-thread anyway
-        // - when `must_be_dropped_before` completes, at least `result_rx` or `polled_forbidden_thing_rx` will have resolved
-        // - either of these channels being written to, means that the `RunnableTransaction` has been dropped
-        // Point 2 is enforced outside of the unsafe jar, but it's fine considering it will only result in a spurious panic/abort
-        if Rc::strong_count(&state) != 1 {
-            panic!("Bug in the indexed-db crate: the transaction was not dropped before the end of its lifetime");
+pub async fn extend_lifetime_to_scope_and_run<'scope, ScopeArgs, ScopeRet>(
+    scope: impl AsyncFnOnce(ScopeCallback<'scope, ScopeArgs>) -> ScopeRet,
+) -> ScopeRet {
+    let state = Rc::new(OnceCell::new());
+    let callback = ScopeCallback {
+        state: state.clone(),
+        maker: None,
+        _phantom: PhantomData,
+    };
+    let result = AssertUnwindSafe((scope)(callback)).catch_unwind().await;
+    if let Some(state) = state.get() {
+        if Weak::strong_count(&state) != 0 {
+            // Make sure that regardless of what the user could be doing, if we're overextending the lifetime we'll panic and abort
+            //
+            // Note: we know this won't spuriously hit because:
+            // - we're using `Rc`, so every `RunnableTransaction` operation is single-thread anyway
+            // - when the scope completes, at least `result_rx` or `polled_forbidden_thing_rx` will have resolved
+            // - either of these channels being written to, means that the `RunnableTransaction` has been dropped
+            // Point 2 is enforced outside of the unsafe jar, but it's fine considering it will only result in a spurious panic/abort
+            let _ = std::panic::catch_unwind(|| {
+                panic!("Bug in the indexed-db crate: the transaction was not dropped before the end of its lifetime")
+            });
+            std::process::abort();
         }
-        result
-    })
-    .catch_unwind()
-    .await;
-    if Rc::strong_count(&state) != 1 {
-        // Make sure we abort regardless of what the user could be doing, if we're overextending the lifetime we'll also panic
-        std::process::abort();
     }
     match result {
         Ok(result) => result,

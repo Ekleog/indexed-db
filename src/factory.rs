@@ -1,11 +1,16 @@
-use crate::{transaction::unsafe_jar, utils::generic_request, Database, Transaction};
+use crate::{
+    transaction::unsafe_jar::{self, extend_lifetime_to_scope_and_run},
+    utils::generic_request,
+    Database, Transaction,
+};
 use futures_channel::oneshot;
 use futures_util::{pin_mut, FutureExt};
-use std::{cell::Cell, marker::PhantomData, rc::Rc};
+use std::{cell::Cell, marker::PhantomData};
 use web_sys::{
     js_sys::{self, Function},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
-    IdbDatabase, IdbFactory, IdbOpenDbRequest, IdbVersionChangeEvent, WorkerGlobalScope,
+    IdbDatabase, IdbFactory, IdbOpenDbRequest, IdbTransaction, IdbVersionChangeEvent,
+    WorkerGlobalScope,
 };
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
@@ -98,7 +103,7 @@ impl<Err: 'static> Factory<Err> {
         &self,
         name: &str,
         version: u32,
-        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
+        on_upgrade_needed: impl AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
     ) -> crate::Result<Database<Err>, Err> {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
@@ -111,47 +116,53 @@ impl<Err: 'static> Factory<Err> {
 
         let (upgrade_res_tx, mut upgrade_res_rx) = oneshot::channel();
         let (polled_forbidden_thing_tx, mut polled_forbidden_thing_rx) = oneshot::channel();
-        let ran_upgrade_cb = Rc::new(Cell::new(false));
-        let ran_upgrade_cb_clone = ran_upgrade_cb.clone();
-        // Separate variable to keep the closure alive until opening completed
-        let on_upgrade_needed = Closure::once(move |evt: IdbVersionChangeEvent| {
-            let evt = VersionChangeEvent::from_sys(evt);
-            let transaction = evt.transaction().as_sys().clone();
-            let fut = async move {
-                ran_upgrade_cb_clone.set(true);
-                on_upgrade_needed(evt).await
-            };
-            unsafe_jar::run(unsafe_jar::RunnableTransaction::new(
-                transaction,
-                fut,
-                upgrade_res_tx,
-                polled_forbidden_thing_tx,
+        let ran_upgrade_cb = Cell::new(false);
+        let ran_upgrade_cb = &ran_upgrade_cb;
+
+        extend_lifetime_to_scope_and_run(async move |mut s| {
+            // Separate variable to keep the closure alive until opening completed
+            s.set_maker(move |(transaction, event): (IdbTransaction, VersionChangeEvent<Err>)| {
+                let fut = async move {
+                    ran_upgrade_cb.set(true);
+                    on_upgrade_needed(event).await
+                };
+                unsafe_jar::RunnableTransaction::new(
+                    transaction,
+                    fut,
+                    upgrade_res_tx,
+                    polled_forbidden_thing_tx,
+                )
+            });
+            let on_upgrade_needed = Closure::once(move |evt: IdbVersionChangeEvent| {
+                let evt = VersionChangeEvent::from_sys(evt);
+                let transaction = evt.transaction().as_sys().clone();
+                s.run((transaction, evt))
+            });
+            open_req.set_onupgradeneeded(Some(
+                on_upgrade_needed.as_ref().dyn_ref::<Function>().unwrap(),
             ));
-        });
-        open_req.set_onupgradeneeded(Some(
-            on_upgrade_needed.as_ref().dyn_ref::<Function>().unwrap(),
-        ));
 
-        let completion_res = generic_request(open_req.clone().into()).await;
-        if ran_upgrade_cb.get() {
-            // The upgrade callback was run, so we need to wait for its result to reach us
-            futures_util::select! {
-                upgrade_res = upgrade_res_rx => {
-                    let upgrade_res = upgrade_res.expect("Closure dropped before its end of scope");
-                    upgrade_res?;
-                },
-                _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
+            let completion_res = generic_request(open_req.clone().into()).await;
+            if ran_upgrade_cb.get() {
+                // The upgrade callback was run, so we need to wait for its result to reach us
+                futures_util::select! {
+                    upgrade_res = upgrade_res_rx => {
+                        let upgrade_res = upgrade_res.expect("Closure dropped before its end of scope");
+                        upgrade_res?;
+                    },
+                    _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
+                }
             }
-        }
-        completion_res.map_err(crate::Error::from_js_event)?;
+            completion_res.map_err(crate::Error::from_js_event)?;
 
-        let db = open_req
-            .result()
-            .map_err(crate::Error::from_js_value)?
-            .dyn_into::<IdbDatabase>()
-            .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
+            let db = open_req
+                .result()
+                .map_err(crate::Error::from_js_value)?
+                .dyn_into::<IdbDatabase>()
+                .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
 
-        Ok(Database::from_sys(db))
+            Ok(Database::from_sys(db))
+        }).await
     }
 
     /// Open a database at the latest version
