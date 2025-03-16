@@ -1,4 +1,4 @@
-use crate::{transaction::runner, utils::generic_request, Database, Transaction};
+use crate::{transaction::unsafe_jar, utils::generic_request, Database, Transaction};
 use futures_channel::oneshot;
 use futures_util::{pin_mut, FutureExt};
 use std::{cell::Cell, marker::PhantomData, rc::Rc};
@@ -121,7 +121,7 @@ impl<Err: 'static> Factory<Err> {
                 ran_upgrade_cb_clone.set(true);
                 on_upgrade_needed(evt).await
             };
-            runner::run(runner::RunnableTransaction::new(
+            unsafe_jar::run(unsafe_jar::RunnableTransaction::new(
                 transaction,
                 fut,
                 upgrade_res_tx,

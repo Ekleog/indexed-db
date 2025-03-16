@@ -9,7 +9,7 @@ use web_sys::{
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
 };
 
-pub(crate) mod runner;
+pub(crate) mod unsafe_jar;
 
 /// Wrapper for [`IDBTransaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
 #[derive(Debug)]
@@ -99,12 +99,8 @@ impl<Err> TransactionBuilder<Err> {
     //   untested and unsupported code path.
     pub async fn run<Ret>(
         self,
-        transaction: impl 'static + AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err>,
-    ) -> crate::Result<Ret, Err>
-    where
-        Ret: 'static,
-        Err: 'static,
-    {
+        transaction: impl AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err>,
+    ) -> crate::Result<Ret, Err> {
         let t = self
             .db
             .transaction_with_str_sequence_and_mode(&self.stores, self.mode)
@@ -117,16 +113,20 @@ impl<Err> TransactionBuilder<Err> {
         let (result_tx, mut result_rx) = futures_channel::oneshot::channel();
         let (polled_forbidden_thing_tx, mut polled_forbidden_thing_rx) =
             futures_channel::oneshot::channel();
-        runner::run(runner::RunnableTransaction::new(
-            t.clone(),
-            transaction(Transaction::from_sys(t)),
-            result_tx,
-            polled_forbidden_thing_tx,
-        ));
-        futures_util::select! {
-            res = result_rx => res.expect("Transaction never completed"),
-            _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
-        }
+        unsafe_jar::extend_lifetime_and_run(
+            unsafe_jar::RunnableTransaction::new(
+                t.clone(),
+                transaction(Transaction::from_sys(t)),
+                result_tx,
+                polled_forbidden_thing_tx,
+            ),
+            async move || {
+                futures_util::select! {
+                    res = result_rx => res.expect("Transaction never completed"),
+                    _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
+                }
+            },
+        ).await
     }
 }
 
@@ -139,7 +139,7 @@ pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsVa
 
     // Keep the callbacks alive until execution completed
     // This also means that the tx's will not be dropped, hence the below unwraps
-    let _callbacks = runner::add_request(req, success_tx, error_tx);
+    let _callbacks = unsafe_jar::add_request(req, success_tx, error_tx);
 
     futures_util::select! {
         success_res = success_rx => {
