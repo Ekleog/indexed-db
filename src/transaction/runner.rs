@@ -25,16 +25,46 @@ use web_sys::{
 
 pub struct PolledForbiddenThing;
 
-struct State {
+pub struct RunnableTransaction {
     transaction: IdbTransaction,
     inflight_requests: Cell<usize>,
     future: RefCell<Pin<Box<dyn 'static + Future<Output = ()>>>>,
     send_polled_forbidden_thing_to: RefCell<Option<oneshot::Sender<PolledForbiddenThing>>>,
 }
 
-scoped_thread_local!(static CURRENT: Rc<State>);
+impl RunnableTransaction {
+    pub fn new<R, E>(
+        transaction: IdbTransaction,
+        transaction_contents: impl 'static + Future<Output = Result<R, E>>,
+        send_res_to: oneshot::Sender<Result<R, E>>,
+        send_polled_forbidden_thing_to: oneshot::Sender<PolledForbiddenThing>,
+    ) -> RunnableTransaction
+    where
+        R: 'static,
+        E: 'static,
+    {
+        RunnableTransaction {
+            transaction: transaction.clone(),
+            inflight_requests: Cell::new(0),
+            future: RefCell::new(Box::pin(async move {
+                let result = transaction_contents.await;
+                if result.is_err() {
+                    // The transaction failed. We should abort it.
+                    let _ = transaction.abort();
+                }
+                if send_res_to.send(result).is_err() {
+                    // Transaction was cancelled by being dropped, abort it
+                    let _ = transaction.abort();
+                }
+            })),
+            send_polled_forbidden_thing_to: RefCell::new(Some(send_polled_forbidden_thing_to)),
+        }
+    }
+}
 
-fn poll_it(state: &Rc<State>) {
+scoped_thread_local!(static CURRENT: Rc<RunnableTransaction>);
+
+fn poll_it(state: &Rc<RunnableTransaction>) {
     CURRENT.set(&state, || {
         // Poll once, in order to run the transaction until its next await on a request
         let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -81,32 +111,7 @@ fn poll_it(state: &Rc<State>) {
     });
 }
 
-pub fn run<Fut, R, E>(
-    transaction: IdbTransaction,
-    transaction_contents: Fut,
-    send_res_to: oneshot::Sender<Result<R, E>>,
-    send_polled_forbidden_thing_to: oneshot::Sender<PolledForbiddenThing>,
-) where
-    Fut: 'static + Future<Output = Result<R, E>>,
-    R: 'static,
-    E: 'static,
-{
-    let state = State {
-        transaction: transaction.clone(),
-        inflight_requests: Cell::new(0),
-        future: RefCell::new(Box::pin(async move {
-            let result = transaction_contents.await;
-            if result.is_err() {
-                // The transaction failed. We should abort it.
-                let _ = transaction.abort();
-            }
-            if send_res_to.send(result).is_err() {
-                // Transaction was cancelled by being dropped, abort it
-                let _ = transaction.abort();
-            }
-        })),
-        send_polled_forbidden_thing_to: RefCell::new(Some(send_polled_forbidden_thing_to)),
-    };
+pub fn run(state: RunnableTransaction) {
     poll_it(&Rc::new(state));
 }
 

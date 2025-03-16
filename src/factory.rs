@@ -121,7 +121,12 @@ impl<Err: 'static> Factory<Err> {
                 ran_upgrade_cb_clone.set(true);
                 on_upgrade_needed(evt).await
             };
-            runner::run(transaction, fut, upgrade_res_tx, polled_forbidden_thing_tx);
+            runner::run(runner::RunnableTransaction::new(
+                transaction,
+                fut,
+                upgrade_res_tx,
+                polled_forbidden_thing_tx,
+            ));
         });
         open_req.set_onupgradeneeded(Some(
             on_upgrade_needed.as_ref().dyn_ref::<Function>().unwrap(),

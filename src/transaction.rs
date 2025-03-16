@@ -117,12 +117,12 @@ impl<Err> TransactionBuilder<Err> {
         let (result_tx, mut result_rx) = futures_channel::oneshot::channel();
         let (polled_forbidden_thing_tx, mut polled_forbidden_thing_rx) =
             futures_channel::oneshot::channel();
-        runner::run(
+        runner::run(runner::RunnableTransaction::new(
             t.clone(),
             transaction(Transaction::from_sys(t)),
             result_tx,
             polled_forbidden_thing_tx,
-        );
+        ));
         futures_util::select! {
             res = result_rx => res.expect("Transaction never completed"),
             _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
