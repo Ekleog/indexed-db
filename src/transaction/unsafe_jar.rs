@@ -117,30 +117,36 @@ pub fn run(state: RunnableTransaction<'static>) {
     poll_it(&state);
 }
 
-async fn run_and_check_dropped_before<R>(
-    state: &Rc<RunnableTransaction<'static>>,
-    must_be_dropped_before: impl AsyncFnOnce() -> R,
-) -> R {
-    poll_it(state);
-    let result = must_be_dropped_before().await;
-    if Rc::strong_count(state) != 1 {
-        panic!("Bug in the indexed-db crate: the transaction was not dropped before the end of its lifetime");
-    }
-    result
-}
-
 /// Panics and aborts the whole process if the transaction is not dropped before the end of `must_be_dropped_before`
 pub async fn extend_lifetime_and_run<'f, R>(
     state: RunnableTransaction<'f>,
     must_be_dropped_before: impl AsyncFnOnce() -> R,
 ) -> R {
+    // SAFETY: We're extending the lifetime of `state` to `'static`.
+    // This is safe because the `RunnableTransaction` is not stored anywhere else, and it will be dropped
+    // before the end of the `must_be_dropped_before` future.
+    // If it is not, we'll panic and abort the whole process.
+    // The `Rc::strong_count` check is there to ensure that the transaction is dropped before the end of its lifetime.
     let state: RunnableTransaction<'static> = unsafe { std::mem::transmute(state) };
     let state = Rc::new(state);
     // Abort on panic if there's remaining references, there's nothing recoverable if we overextended the lifetime
-    let result = AssertUnwindSafe(run_and_check_dropped_before(&state, must_be_dropped_before))
-        .catch_unwind()
-        .await;
+    let result = AssertUnwindSafe(async {
+        poll_it(&state);
+        let result = must_be_dropped_before().await;
+        // Note: we know this won't spuriously hit because:
+        // - we're having `Rc`, so every `RunnableTransaction` operation is single-thread anyway
+        // - when `must_be_dropped_before` completes, at least `result_rx` or `polled_forbidden_thing_rx` will have resolved
+        // - either of these channels being written to, means that the `RunnableTransaction` has been dropped
+        // Point 2 is enforced outside of the unsafe jar, but it's fine considering it will only result in a spurious panic/abort
+        if Rc::strong_count(&state) != 1 {
+            panic!("Bug in the indexed-db crate: the transaction was not dropped before the end of its lifetime");
+        }
+        result
+    })
+    .catch_unwind()
+    .await;
     if Rc::strong_count(&state) != 1 {
+        // Make sure we abort regardless of what the user could be doing, if we're overextending the lifetime we'll also panic
         std::process::abort();
     }
     match result {
