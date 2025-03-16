@@ -8,11 +8,12 @@
 //! The API exposed from here is entirely safe, and this module's code should be properly audited.
 
 use futures_channel::oneshot;
-use futures_util::task::noop_waker;
+use futures_util::{task::noop_waker, FutureExt};
 use scoped_tls::scoped_thread_local;
 use std::{
     cell::{Cell, RefCell},
     future::Future,
+    panic::AssertUnwindSafe,
     pin::Pin,
     rc::Rc,
     task::{Context, Poll},
@@ -116,6 +117,18 @@ pub fn run(state: RunnableTransaction<'static>) {
     poll_it(&state);
 }
 
+async fn run_and_check_dropped_before<R>(
+    state: &Rc<RunnableTransaction<'static>>,
+    must_be_dropped_before: impl AsyncFnOnce() -> R,
+) -> R {
+    poll_it(state);
+    let result = must_be_dropped_before().await;
+    if Rc::strong_count(state) != 1 {
+        panic!("Bug in the indexed-db crate: the transaction was not dropped before the end of its lifetime");
+    }
+    result
+}
+
 /// Panics and aborts the whole process if the transaction is not dropped before the end of `must_be_dropped_before`
 pub async fn extend_lifetime_and_run<'f, R>(
     state: RunnableTransaction<'f>,
@@ -123,16 +136,17 @@ pub async fn extend_lifetime_and_run<'f, R>(
 ) -> R {
     let state: RunnableTransaction<'static> = unsafe { std::mem::transmute(state) };
     let state = Rc::new(state);
-    poll_it(&state);
-    let result = must_be_dropped_before().await;
+    // Abort on panic if there's remaining references, there's nothing recoverable if we overextended the lifetime
+    let result = AssertUnwindSafe(run_and_check_dropped_before(&state, must_be_dropped_before))
+        .catch_unwind()
+        .await;
     if Rc::strong_count(&state) != 1 {
-        // Panic in a non-recoverable way, but after having called the hook for user-friendliness
-        let _ = std::panic::catch_unwind(|| {
-            panic!("Bug in the indexed-db crate: the transaction was not dropped before the end of its lifetime");
-        });
         std::process::abort();
     }
-    result
+    match result {
+        Ok(result) => result,
+        Err(err) => std::panic::resume_unwind(err),
+    }
 }
 
 pub fn add_request(
