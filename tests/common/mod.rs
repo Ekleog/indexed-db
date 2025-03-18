@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use indexed_db::{Error, Factory};
 use wasm_bindgen_test::wasm_bindgen_test;
 use web_sys::{
@@ -356,6 +358,48 @@ async fn typed_array_keys() {
                     .await?
             );
 
+            Ok(())
+        })
+        .await
+        .unwrap();
+}
+
+#[wasm_bindgen_test]
+async fn borrowing_transaction() {
+    let factory = Factory::get().unwrap();
+
+    let db = factory
+        .open::<Infallible>("foo42", 1, async move |evt| {
+            evt.build_object_store("data").create()?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let data_from_outside = String::from("superlargedata");
+    db.transaction(&["data"])
+        .rw()
+        .run::<_, Infallible>(async |t| {
+            let data = t.object_store("data")?;
+            data.add_kv(
+                &JsString::from("data"),
+                &JsString::from(&data_from_outside as &str),
+            )
+            .await?;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    db.transaction(&["data"])
+        .run::<_, Infallible>(async |t| {
+            let data = t.object_store("data")?;
+            assert_eq!(
+                data.get(&JsString::from("data"))
+                    .await?
+                    .unwrap()
+                    .as_string()
+                    .unwrap(),
+                data_from_outside
+            );
             Ok(())
         })
         .await
