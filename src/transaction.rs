@@ -44,21 +44,19 @@ impl<Err> Transaction<Err> {
 }
 
 /// Helper to build a transaction
-pub struct TransactionBuilder<Err> {
+pub struct TransactionBuilder {
     db: IdbDatabase,
     stores: JsValue,
     mode: IdbTransactionMode,
-    _phantom: PhantomData<Err>,
     // TODO: add support for transaction durability when web-sys gets it
 }
 
-impl<Err> TransactionBuilder<Err> {
-    pub(crate) fn from_names(db: IdbDatabase, names: &[&str]) -> TransactionBuilder<Err> {
+impl TransactionBuilder {
+    pub(crate) fn from_names(db: IdbDatabase, names: &[&str]) -> TransactionBuilder {
         TransactionBuilder {
             db,
             stores: str_slice_to_array(names).into(),
             mode: IdbTransactionMode::Readonly,
-            _phantom: PhantomData,
         }
     }
 
@@ -97,7 +95,7 @@ impl<Err> TransactionBuilder<Err> {
     // - If the `Closure` from `transaction_request` has already been dropped, then the callback
     //   will panic. Most likely this will lead to the transaction aborting, but this is an
     //   untested and unsupported code path.
-    pub async fn run<Ret>(
+    pub async fn run<Ret, Err>(
         self,
         transaction: impl 'static + AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err>,
     ) -> crate::Result<Ret, Err>

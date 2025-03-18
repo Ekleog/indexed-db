@@ -11,7 +11,7 @@ async fn smoke_test() {
     // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
     // Factory::get
-    let factory = Factory::<()>::get().unwrap();
+    let factory = Factory::get().unwrap();
 
     // Factory::cmp
     assert_eq!(
@@ -30,12 +30,15 @@ async fn smoke_test() {
 
     // Factory::open
     factory
-        .open("foo", 0, async move |_| Ok(()))
+        .open::<()>("foo", 0, async move |_| Ok(()))
         .await
         .unwrap_err();
-    factory.open("foo", 2, async move |_| Ok(())).await.unwrap();
     factory
-        .open("foo", 1, async move |_| Ok(()))
+        .open::<()>("foo", 2, async move |_| Ok(()))
+        .await
+        .unwrap();
+    factory
+        .open::<()>("foo", 1, async move |_| Ok(()))
         .await
         .unwrap_err();
 
@@ -46,13 +49,12 @@ async fn smoke_test() {
 
     // Database::build_object_store
     let db = factory
-        .open("bar", 1, async move |evt| {
-            let db = evt.database();
-            db.build_object_store("objects").create()?;
-            db.build_object_store("things")
+        .open::<()>("bar", 1, async move |evt| {
+            evt.build_object_store("objects").create()?;
+            evt.build_object_store("things")
                 .compound_key_path(&["foo", "bar"])
                 .create()?;
-            let stuffs = db.build_object_store("stuffs").auto_increment().create()?;
+            let stuffs = evt.build_object_store("stuffs").auto_increment().create()?;
             stuffs.build_index("contents", "").create()?;
             Ok(())
         })
@@ -64,9 +66,8 @@ async fn smoke_test() {
     db.close();
 
     let db = factory
-        .open("bar", 2, async move |evt| {
-            let db = evt.database();
-            db.delete_object_store("things")?;
+        .open::<()>("bar", 2, async move |evt| {
+            evt.delete_object_store("things")?;
             Ok(())
         })
         .await
@@ -78,7 +79,7 @@ async fn smoke_test() {
     // Transaction
     db.transaction(&["objects", "stuffs"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             let objects = t.object_store("objects")?;
             let stuffs = t.object_store("stuffs")?;
 
@@ -102,7 +103,7 @@ async fn smoke_test() {
         .unwrap();
     db.transaction(&["objects", "stuffs"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             let objects = t.object_store("objects")?;
             let stuffs = t.object_store("stuffs")?;
 
@@ -132,7 +133,7 @@ async fn smoke_test() {
         .unwrap();
     db.transaction(&["objects"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             let objects = t.object_store("objects")?;
 
             // Get
@@ -168,7 +169,7 @@ async fn smoke_test() {
         .unwrap();
     db.transaction(&["stuffs"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             let stuffs = t.object_store("stuffs")?;
 
             // Index
@@ -224,9 +225,8 @@ async fn auto_rollback() {
     let factory = Factory::get().unwrap();
 
     let db = factory
-        .open("baz", 1, async move |evt| {
-            let db = evt.database();
-            db.build_object_store("data").auto_increment().create()?;
+        .open::<()>("baz", 1, async move |evt| {
+            evt.build_object_store("data").auto_increment().create()?;
             Ok(())
         })
         .await
@@ -234,7 +234,7 @@ async fn auto_rollback() {
 
     db.transaction(&["data"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             t.object_store("data")?.add(&JsString::from("foo")).await?;
             t.object_store("data")?.add(&JsString::from("bar")).await?;
             if true {
@@ -248,7 +248,7 @@ async fn auto_rollback() {
 
     db.transaction(&["data"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             t.object_store("data")?.add(&JsString::from("baz")).await?;
             Ok::<_, indexed_db::Error<()>>(())
         })
@@ -257,7 +257,7 @@ async fn auto_rollback() {
 
     db.transaction(&["data"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             assert_eq!(t.object_store("data")?.count().await?, 1);
             Ok::<_, indexed_db::Error<()>>(())
         })
@@ -267,12 +267,11 @@ async fn auto_rollback() {
 
 #[wasm_bindgen_test]
 async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
-    let factory = Factory::<()>::get().unwrap();
+    let factory = Factory::get().unwrap();
 
     let db = factory
-        .open("quux", 1, async move |evt| {
-            let db = evt.database();
-            db.build_object_store("data").create()?;
+        .open::<()>("quux", 1, async move |evt| {
+            evt.build_object_store("data").create()?;
             Ok(())
         })
         .await
@@ -280,7 +279,7 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
 
     db.transaction(&["data"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             t.object_store("data")?
                 .add_kv(&JsString::from("key1"), &JsString::from("foo"))
                 .await?;
@@ -291,7 +290,7 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
 
     db.transaction(&["data"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             assert!(matches!(
                 t.object_store("data")?
                     .add_kv(&JsString::from("key1"), &JsString::from("bar"))
@@ -309,7 +308,7 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
 
     db.transaction(&["data"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             assert_eq!(
                 t.object_store("data")?.get_all_keys(None).await?,
                 vec![JsValue::from("key1"), JsValue::from("key2")]
@@ -326,12 +325,11 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
 
 #[wasm_bindgen_test]
 async fn typed_array_keys() {
-    let factory = Factory::<()>::get().unwrap();
+    let factory = Factory::get().unwrap();
 
     let db = factory
-        .open("db12", 1, async move |evt| {
-            let db = evt.database();
-            db.build_object_store("data").create()?;
+        .open::<()>("db12", 1, async move |evt| {
+            evt.build_object_store("data").create()?;
             Ok(())
         })
         .await
@@ -339,7 +337,7 @@ async fn typed_array_keys() {
 
     db.transaction(&["data"])
         .rw()
-        .run(async move |t| {
+        .run::<_, ()>(async move |t| {
             let data = t.object_store("data")?;
             data.add_kv(&Uint8Array::from(&b"key1"[..]), &JsString::from("foo"))
                 .await?;

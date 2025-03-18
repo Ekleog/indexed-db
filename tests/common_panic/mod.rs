@@ -9,12 +9,11 @@ async fn other_awaits_panic() {
     // tracing_wasm::set_as_global_default();
     // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let factory = Factory::<anyhow::Error>::get().unwrap();
+    let factory = Factory::get().unwrap();
 
     let db = factory
-        .open("baz", 1, async move |evt| {
-            let db = evt.database();
-            db.build_object_store("data").auto_increment().create()?;
+        .open::<()>("baz", 1, async move |evt| {
+            evt.build_object_store("data").auto_increment().create()?;
             Ok(())
         })
         .await
@@ -24,7 +23,7 @@ async fn other_awaits_panic() {
 
     db.transaction(&["data"])
         .rw()
-        .run(async move |t| {
+        .run::<_, anyhow::Error>(async move |t| {
             t.object_store("data")?.add(&JsString::from("foo")).await?;
             rx.await.context("awaiting for something external")?;
             t.object_store("data")?.add(&JsString::from("bar")).await?;
@@ -42,14 +41,13 @@ async fn await_in_versionchange_panics() {
     // tracing_wasm::set_as_global_default();
     // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
 
-    let factory = Factory::<anyhow::Error>::get().unwrap();
+    let factory = Factory::get().unwrap();
 
     let (tx, rx) = futures_channel::oneshot::channel();
 
     factory
-        .open("baz", 1, async move |evt| {
-            let db = evt.database();
-            db.build_object_store("data").auto_increment().create()?;
+        .open::<anyhow::Error>("baz", 1, async move |evt| {
+            evt.build_object_store("data").auto_increment().create()?;
             rx.await.context("awaiting for something external")?;
             Ok(())
         })

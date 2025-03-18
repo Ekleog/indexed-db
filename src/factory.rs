@@ -1,30 +1,28 @@
-use crate::{transaction::runner, utils::generic_request, Database, Transaction};
+use crate::{
+    transaction::runner, utils::generic_request, utils::str_slice_to_array, Database, ObjectStore,
+    Transaction,
+};
 use futures_channel::oneshot;
 use futures_util::{pin_mut, FutureExt};
-use std::{cell::Cell, marker::PhantomData, rc::Rc};
+use std::{cell::Cell, convert::Infallible, marker::PhantomData, rc::Rc};
 use web_sys::{
-    js_sys::{self, Function},
+    js_sys::{self, Function, JsString},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
-    IdbDatabase, IdbFactory, IdbOpenDbRequest, IdbVersionChangeEvent, WorkerGlobalScope,
+    IdbDatabase, IdbFactory, IdbObjectStoreParameters, IdbOpenDbRequest, IdbVersionChangeEvent,
+    WorkerGlobalScope,
 };
 
 /// Wrapper for [`IDBFactory`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory)
-///
-/// Note that it is quite likely that type inference will fail on the `Err` generic argument here.
-/// This argument is the type of user-defined errors that will be passed through transactions and
-/// callbacks.
-/// You should set it to whatever error type your program uses around the `indexed-db`-using code.
 #[derive(Debug)]
-pub struct Factory<Err> {
+pub struct Factory {
     sys: IdbFactory,
-    _phantom: PhantomData<Err>,
 }
 
-impl<Err: 'static> Factory<Err> {
+impl Factory {
     /// Retrieve the global `Factory` from the browser
     ///
     /// This internally uses [`indexedDB`](https://developer.mozilla.org/en-US/docs/Web/API/indexedDB).
-    pub fn get() -> crate::Result<Factory<Err>, Err> {
+    pub fn get() -> crate::Result<Factory, Infallible> {
         let indexed_db = if let Some(window) = web_sys::window() {
             window.indexed_db()
         } else if let Ok(worker_scope) = js_sys::global().dyn_into::<WorkerGlobalScope>() {
@@ -37,10 +35,7 @@ impl<Err: 'static> Factory<Err> {
             .map_err(|_| crate::Error::IndexedDbDisabled)?
             .ok_or(crate::Error::IndexedDbDisabled)?;
 
-        Ok(Factory {
-            sys,
-            _phantom: PhantomData,
-        })
+        Ok(Factory { sys })
     }
 
     /// Compare two keys for ordering
@@ -48,7 +43,11 @@ impl<Err: 'static> Factory<Err> {
     /// Returns an error if one of the two values would not be a valid IndexedDb key.
     ///
     /// This internally uses [`IDBFactory::cmp`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/cmp).
-    pub fn cmp(&self, lhs: &JsValue, rhs: &JsValue) -> crate::Result<std::cmp::Ordering, Err> {
+    pub fn cmp(
+        &self,
+        lhs: &JsValue,
+        rhs: &JsValue,
+    ) -> crate::Result<std::cmp::Ordering, Infallible> {
         use std::cmp::Ordering::*;
         self.sys
             .cmp(lhs, rhs)
@@ -72,7 +71,7 @@ impl<Err: 'static> Factory<Err> {
     /// a database that does not exist will result in a successful result.
     ///
     /// This internally uses [`IDBFactory::deleteDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/deleteDatabase)
-    pub async fn delete_database(&self, name: &str) -> crate::Result<(), Err> {
+    pub async fn delete_database(&self, name: &str) -> crate::Result<(), Infallible> {
         generic_request(
             self.sys
                 .delete_database(name)
@@ -94,12 +93,16 @@ impl<Err: 'static> Factory<Err> {
     ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
-    pub async fn open(
+    // TODO: once the never_type feature is stabilized, we can finally stop carrying any `Err` generic
+    pub async fn open<Err>(
         &self,
         name: &str,
         version: u32,
         on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
-    ) -> crate::Result<Database<Err>, Err> {
+    ) -> crate::Result<Database, Err>
+    where
+        Err: 'static,
+    {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
         }
@@ -161,7 +164,7 @@ impl<Err: 'static> Factory<Err> {
     ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
-    pub async fn open_latest_version(&self, name: &str) -> crate::Result<Database<Err>, Err> {
+    pub async fn open_latest_version(&self, name: &str) -> crate::Result<Database, Infallible> {
         let open_req = self.sys.open(name).map_err(crate::Error::from_js_value)?;
 
         let completion_fut = generic_request(open_req.clone().into())
@@ -184,7 +187,7 @@ impl<Err: 'static> Factory<Err> {
 #[derive(Debug)]
 pub struct VersionChangeEvent<Err> {
     sys: IdbVersionChangeEvent,
-    db: Database<Err>,
+    db: Database,
     transaction: Transaction<Err>,
 }
 
@@ -229,8 +232,34 @@ impl<Err> VersionChangeEvent<Err> {
     }
 
     /// The database under creation
-    pub fn database(&self) -> &Database<Err> {
+    pub fn database(&self) -> &Database {
         &self.db
+    }
+
+    /// Build an [`ObjectStore`]
+    ///
+    /// This returns a builder, and calling the `create` method on this builder will perform the actual creation.
+    ///
+    /// Internally, this uses [`IDBDatabase::createObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore).
+    pub fn build_object_store<'a>(&self, name: &'a str) -> ObjectStoreBuilder<'a, Err> {
+        ObjectStoreBuilder {
+            db: self.db.as_sys().clone(),
+            name,
+            options: IdbObjectStoreParameters::new(),
+            _phantom: PhantomData,
+        }
+    }
+
+    /// Deletes an [`ObjectStore`]
+    ///
+    /// Internally, this uses [`IDBDatabase::deleteObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/deleteObjectStore).
+    pub fn delete_object_store(&self, name: &str) -> crate::Result<(), Err> {
+        self.db.as_sys().delete_object_store(name).map_err(|err| match error_name!(&err) {
+                Some("InvalidStateError") => crate::Error::InvalidCall,
+                Some("TransactionInactiveError") => panic!("Tried to delete an object store with the `versionchange` transaction having already aborted"),
+                Some("NotFoundError") => crate::Error::DoesNotExist,
+                _ => crate::Error::from_js_value(err),
+            })
     }
 
     /// The `versionchange` transaction that triggered this event
@@ -238,5 +267,59 @@ impl<Err> VersionChangeEvent<Err> {
     /// This transaction can be used to submit further requests.
     pub fn transaction(&self) -> &Transaction<Err> {
         &self.transaction
+    }
+}
+
+/// Helper to build an object store
+pub struct ObjectStoreBuilder<'a, Err> {
+    db: IdbDatabase,
+    name: &'a str,
+    options: IdbObjectStoreParameters,
+    _phantom: PhantomData<Err>,
+}
+
+impl<'a, Err> ObjectStoreBuilder<'a, Err> {
+    /// Create the object store
+    ///
+    /// Internally, this uses [`IDBDatabase::createObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore).
+    pub fn create(self) -> crate::Result<ObjectStore<Err>, Err> {
+        self.db
+            .create_object_store_with_optional_parameters(self.name, &self.options)
+            .map_err(
+                |err| match error_name!(&err) {
+                    Some("InvalidStateError") => crate::Error::InvalidCall,
+                    Some("TransactionInactiveError") => panic!("Tried to create an object store with the `versionchange` transaction having already aborted"),
+                    Some("ConstraintError") => crate::Error::AlreadyExists,
+                    Some("InvalidAccessError") => crate::Error::InvalidArgument,
+                    _ => crate::Error::from_js_value(err),
+                },
+            )
+            .map(ObjectStore::from_sys)
+    }
+
+    /// Set the key path for out-of-line keys
+    ///
+    /// If you want to use a compound primary key made of multiple attributes, please see [`ObjectStoreBuilder::compound_key_path`].
+    ///
+    /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#keypath).
+    pub fn key_path(self, path: &str) -> Self {
+        self.options.set_key_path(&JsString::from(path));
+        self
+    }
+
+    /// Set the key path for out-of-line keys
+    ///
+    /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#keypath).
+    pub fn compound_key_path(self, paths: &[&str]) -> Self {
+        self.options.set_key_path(&str_slice_to_array(paths));
+        self
+    }
+
+    /// Enable auto-increment for the key
+    ///
+    /// Internally, this [sets this setting](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore#autoincrement).
+    pub fn auto_increment(self) -> Self {
+        self.options.set_auto_increment(true);
+        self
     }
 }
