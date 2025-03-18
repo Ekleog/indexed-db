@@ -1,6 +1,6 @@
 use crate::{
-    transaction::runner, utils::generic_request, utils::str_slice_to_array, Database, ObjectStore,
-    Transaction,
+    database::OwnedDatabase, transaction::runner, utils::generic_request,
+    utils::str_slice_to_array, Database, ObjectStore, Transaction,
 };
 use futures_channel::oneshot;
 use futures_util::{pin_mut, FutureExt};
@@ -99,7 +99,7 @@ impl Factory {
         name: &str,
         version: u32,
         on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
-    ) -> crate::Result<Database, Err>
+    ) -> crate::Result<OwnedDatabase, Err>
     where
         Err: 'static,
     {
@@ -154,7 +154,7 @@ impl Factory {
             .dyn_into::<IdbDatabase>()
             .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
 
-        Ok(Database::from_sys(db))
+        Ok(Database::from_sys(db).into())
     }
 
     /// Open a database at the latest version
