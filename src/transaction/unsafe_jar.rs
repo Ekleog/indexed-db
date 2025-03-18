@@ -134,7 +134,7 @@ impl<Args> ScopeCallback<Args> {
     }
 }
 
-/// Panics and aborts the whole process if the transaction is not dropped before the end of `must_be_dropped_before`
+/// Panics and aborts the whole process if the transaction is not dropped before the end of `scope`
 pub async fn extend_lifetime_to_scope_and_run<'scope, MakerArgs, ScopeRet>(
     maker: Box<dyn 'scope + FnOnce(MakerArgs) -> RunnableTransaction<'scope>>,
     scope: impl 'scope + AsyncFnOnce(ScopeCallback<MakerArgs>) -> ScopeRet,

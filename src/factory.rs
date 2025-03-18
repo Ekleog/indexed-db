@@ -1,5 +1,5 @@
 use crate::{
-    transaction::unsafe_jar::{self, extend_lifetime_to_scope_and_run},
+    transaction::unsafe_jar,
     utils::{generic_request, str_slice_to_array},
     Database, ObjectStore, Transaction,
 };
@@ -115,7 +115,7 @@ impl Factory {
         let ran_upgrade_cb = Cell::new(false);
         let ran_upgrade_cb = &ran_upgrade_cb;
 
-        extend_lifetime_to_scope_and_run(Box::new(move |(transaction, event): (IdbTransaction, VersionChangeEvent<Err>)| {
+        unsafe_jar::extend_lifetime_to_scope_and_run(Box::new(move |(transaction, event): (IdbTransaction, VersionChangeEvent<Err>)| {
             let fut = async move {
                 ran_upgrade_cb.set(true);
                 on_upgrade_needed(event).await
