@@ -7,7 +7,7 @@ use crate::{
     },
 };
 use futures_util::future::Either;
-use std::{future::Future, marker::PhantomData, ops::RangeBounds};
+use std::{convert::Infallible, future::Future, ops::RangeBounds};
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
     IdbCursor, IdbCursorDirection, IdbCursorWithValue, IdbIndex, IdbObjectStore, IdbRequest,
@@ -45,36 +45,33 @@ impl CursorDirection {
 }
 
 /// Helper to build cursors over [`ObjectStore`]s
-pub struct CursorBuilder<Err> {
+pub struct CursorBuilder {
     source: Either<IdbObjectStore, IdbIndex>,
     query: JsValue,
     direction: IdbCursorDirection,
-    _phantom: PhantomData<Err>,
 }
 
-impl<Err> CursorBuilder<Err> {
-    pub(crate) fn from_store(store: IdbObjectStore) -> CursorBuilder<Err> {
+impl CursorBuilder {
+    pub(crate) fn from_store(store: IdbObjectStore) -> CursorBuilder {
         CursorBuilder {
             source: Either::Left(store),
             query: JsValue::UNDEFINED,
             direction: IdbCursorDirection::Next,
-            _phantom: PhantomData,
         }
     }
 
-    pub(crate) fn from_index(index: IdbIndex) -> CursorBuilder<Err> {
+    pub(crate) fn from_index(index: IdbIndex) -> CursorBuilder {
         CursorBuilder {
             source: Either::Right(index),
             query: JsValue::UNDEFINED,
             direction: IdbCursorDirection::Next,
-            _phantom: PhantomData,
         }
     }
 
     /// Open the cursor
     ///
     /// Internally, this uses [`IDBObjectStore::openCursor`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/openCursor).
-    pub fn open(self) -> impl Future<Output = crate::Result<Cursor<Err>, Err>> {
+    pub fn open(self) -> impl Future<Output = crate::Result<Cursor, Infallible>> {
         let req = match self.source {
             Either::Left(store) => {
                 store.open_cursor_with_range_and_direction(&self.query, self.direction)
@@ -92,7 +89,7 @@ impl<Err> CursorBuilder<Err> {
     /// Open the cursor as a key-only cursor
     ///
     /// Internally, this uses [`IDBObjectStore::openKeyCursor`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/openKeyCursor).
-    pub fn open_key(self) -> impl Future<Output = crate::Result<Cursor<Err>, Err>> {
+    pub fn open_key(self) -> impl Future<Output = crate::Result<Cursor, Infallible>> {
         let req = match self.source {
             Either::Left(store) => {
                 store.open_key_cursor_with_range_and_direction(&self.query, self.direction)
@@ -110,7 +107,7 @@ impl<Err> CursorBuilder<Err> {
     /// Limit the range of the cursor
     ///
     /// Internally, this sets [this property](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/openCursor#range).
-    pub fn range(mut self, range: impl RangeBounds<JsValue>) -> crate::Result<Self, Err> {
+    pub fn range(mut self, range: impl RangeBounds<JsValue>) -> crate::Result<Self, Infallible> {
         self.query = make_key_range(range)?;
         Ok(self)
     }
@@ -125,14 +122,13 @@ impl<Err> CursorBuilder<Err> {
 }
 
 /// Wrapper for [`IDBCursorWithValue`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursorWithValue)
-pub struct Cursor<Err> {
+pub struct Cursor {
     sys: Option<IdbCursor>,
     req: IdbRequest,
-    _phantom: PhantomData<Err>,
 }
 
-impl<Err> Cursor<Err> {
-    pub(crate) async fn from(req: IdbRequest) -> crate::Result<Cursor<Err>, Err> {
+impl Cursor {
+    pub(crate) async fn from(req: IdbRequest) -> crate::Result<Cursor, Infallible> {
         let res = transaction_request(req.clone())
             .await
             .map_err(map_open_cursor_err)?;
@@ -144,7 +140,6 @@ impl<Err> Cursor<Err> {
         Ok(Cursor {
             sys,
             req,
-            _phantom: PhantomData,
         })
     }
 
@@ -185,7 +180,7 @@ impl<Err> Cursor<Err> {
     /// Advance this [`Cursor`] by `count` elements
     ///
     /// Internally, this uses [`IDBCursor::advance`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/advance).
-    pub async fn advance(&mut self, count: u32) -> crate::Result<(), Err> {
+    pub async fn advance(&mut self, count: u32) -> crate::Result<(), Infallible> {
         let Some(sys) = &self.sys else {
             return Err(crate::Error::CursorCompleted);
         };
@@ -203,7 +198,7 @@ impl<Err> Cursor<Err> {
     /// Advance this [`Cursor`] until the provided key
     ///
     /// Internally, this uses [`IDBCursor::continue`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/continue).
-    pub async fn advance_until(&mut self, key: &JsValue) -> crate::Result<(), Err> {
+    pub async fn advance_until(&mut self, key: &JsValue) -> crate::Result<(), Infallible> {
         let Some(sys) = &self.sys else {
             return Err(crate::Error::CursorCompleted);
         };
@@ -233,7 +228,7 @@ impl<Err> Cursor<Err> {
         &mut self,
         index_key: &JsValue,
         primary_key: &JsValue,
-    ) -> crate::Result<(), Err> {
+    ) -> crate::Result<(), Infallible> {
         let Some(sys) = &self.sys else {
             return Err(crate::Error::CursorCompleted);
         };
@@ -254,7 +249,7 @@ impl<Err> Cursor<Err> {
     /// Note that this method does not work on key-only cursors over indexes.
     ///
     /// Internally, this uses [`IDBCursor::delete`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/delete).
-    pub async fn delete(&self) -> crate::Result<(), Err> {
+    pub async fn delete(&self) -> crate::Result<(), Infallible> {
         let Some(sys) = &self.sys else {
             return Err(crate::Error::CursorCompleted);
         };
@@ -270,7 +265,7 @@ impl<Err> Cursor<Err> {
     /// Note that this method does not work on key-only cursors over indexes.
     ///
     /// Internally, this uses [`IDBCursor::update`](https://developer.mozilla.org/en-US/docs/Web/API/IDBCursor/update).
-    pub async fn update(&self, value: &JsValue) -> crate::Result<(), Err> {
+    pub async fn update(&self, value: &JsValue) -> crate::Result<(), Infallible> {
         let Some(sys) = &self.sys else {
             return Err(crate::Error::CursorCompleted);
         };

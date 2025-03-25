@@ -98,7 +98,7 @@ impl Factory {
         &self,
         name: &str,
         version: u32,
-        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
+        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent) -> crate::Result<(), Err>,
     ) -> crate::Result<Database, Err>
     where
         Err: 'static,
@@ -185,14 +185,14 @@ impl Factory {
 
 /// Wrapper for [`IDBVersionChangeEvent`](https://developer.mozilla.org/en-US/docs/Web/API/IDBVersionChangeEvent)
 #[derive(Debug)]
-pub struct VersionChangeEvent<Err> {
+pub struct VersionChangeEvent {
     sys: IdbVersionChangeEvent,
     db: Database,
-    transaction: Transaction<Err>,
+    transaction: Transaction,
 }
 
-impl<Err> VersionChangeEvent<Err> {
-    fn from_sys(sys: IdbVersionChangeEvent) -> VersionChangeEvent<Err> {
+impl VersionChangeEvent {
+    fn from_sys(sys: IdbVersionChangeEvent) -> VersionChangeEvent {
         let db_req = sys
             .target()
             .expect("IDBVersionChangeEvent had no target")
@@ -241,19 +241,18 @@ impl<Err> VersionChangeEvent<Err> {
     /// This returns a builder, and calling the `create` method on this builder will perform the actual creation.
     ///
     /// Internally, this uses [`IDBDatabase::createObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore).
-    pub fn build_object_store<'a>(&self, name: &'a str) -> ObjectStoreBuilder<'a, Err> {
+    pub fn build_object_store<'a>(&self, name: &'a str) -> ObjectStoreBuilder<'a> {
         ObjectStoreBuilder {
             db: self.db.as_sys().clone(),
             name,
             options: IdbObjectStoreParameters::new(),
-            _phantom: PhantomData,
         }
     }
 
     /// Deletes an [`ObjectStore`]
     ///
     /// Internally, this uses [`IDBDatabase::deleteObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/deleteObjectStore).
-    pub fn delete_object_store(&self, name: &str) -> crate::Result<(), Err> {
+    pub fn delete_object_store(&self, name: &str) -> crate::Result<(), Infallible> {
         self.db.as_sys().delete_object_store(name).map_err(|err| match error_name!(&err) {
                 Some("InvalidStateError") => crate::Error::InvalidCall,
                 Some("TransactionInactiveError") => panic!("Tried to delete an object store with the `versionchange` transaction having already aborted"),
@@ -265,24 +264,23 @@ impl<Err> VersionChangeEvent<Err> {
     /// The `versionchange` transaction that triggered this event
     ///
     /// This transaction can be used to submit further requests.
-    pub fn transaction(&self) -> &Transaction<Err> {
+    pub fn transaction(&self) -> &Transaction {
         &self.transaction
     }
 }
 
 /// Helper to build an object store
-pub struct ObjectStoreBuilder<'a, Err> {
+pub struct ObjectStoreBuilder<'a> {
     db: IdbDatabase,
     name: &'a str,
     options: IdbObjectStoreParameters,
-    _phantom: PhantomData<Err>,
 }
 
-impl<'a, Err> ObjectStoreBuilder<'a, Err> {
+impl<'a> ObjectStoreBuilder<'a> {
     /// Create the object store
     ///
     /// Internally, this uses [`IDBDatabase::createObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore).
-    pub fn create(self) -> crate::Result<ObjectStore<Err>, Err> {
+    pub fn create(self) -> crate::Result<ObjectStore, Infallible> {
         self.db
             .create_object_store_with_optional_parameters(self.name, &self.options)
             .map_err(

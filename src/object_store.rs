@@ -7,7 +7,7 @@ use crate::{
     CursorBuilder, Index,
 };
 use futures_util::future::{Either, FutureExt};
-use std::{future::Future, marker::PhantomData, ops::RangeBounds};
+use std::{convert::Infallible, future::Future, ops::RangeBounds};
 use web_sys::{js_sys::JsString, wasm_bindgen::JsValue, IdbIndexParameters, IdbObjectStore};
 
 #[cfg(doc)]
@@ -16,16 +16,14 @@ use crate::Cursor;
 /// Wrapper for [`IDBObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore),
 /// for use in transactions
 #[derive(Debug)]
-pub struct ObjectStore<Err> {
+pub struct ObjectStore {
     sys: IdbObjectStore,
-    _phantom: PhantomData<Err>,
 }
 
-impl<Err> ObjectStore<Err> {
-    pub(crate) fn from_sys(sys: IdbObjectStore) -> ObjectStore<Err> {
+impl ObjectStore {
+    pub(crate) fn from_sys(sys: IdbObjectStore) -> ObjectStore {
         ObjectStore {
             sys,
-            _phantom: PhantomData,
         }
     }
 
@@ -37,13 +35,12 @@ impl<Err> ObjectStore<Err> {
     /// If you want to make an index that searches multiple columns, please use [`ObjectStore::build_compound_index`].
     ///
     /// Internally, this uses [`IDBObjectStore::createIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex).
-    pub fn build_index<'a>(&self, name: &'a str, key_path: &str) -> IndexBuilder<'a, Err> {
+    pub fn build_index<'a>(&self, name: &'a str, key_path: &str) -> IndexBuilder<'a> {
         IndexBuilder {
             store: self.sys.clone(),
             name,
             key_path: JsString::from(key_path).into(),
             options: IdbIndexParameters::new(),
-            _phantom: PhantomData,
         }
     }
 
@@ -63,13 +60,12 @@ impl<Err> ObjectStore<Err> {
         &self,
         name: &'a str,
         key_paths: &[&str],
-    ) -> IndexBuilder<'a, Err> {
+    ) -> IndexBuilder<'a> {
         IndexBuilder {
             store: self.sys.clone(),
             name,
             key_path: str_slice_to_array(key_paths).into(),
             options: IdbIndexParameters::new(),
-            _phantom: PhantomData,
         }
     }
 
@@ -78,7 +74,7 @@ impl<Err> ObjectStore<Err> {
     /// Note that this method can only be called from within an `on_upgrade_needed` callback.
     ///
     /// Internally, this uses [`IDBObjectStore::deleteIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/deleteIndex).
-    pub fn delete_index(&self, name: &str) -> crate::Result<(), Err> {
+    pub fn delete_index(&self, name: &str) -> crate::Result<(), Infallible> {
         self.sys
             .delete_index(name)
             .map_err(|err| match error_name!(&err) {
@@ -93,7 +89,7 @@ impl<Err> ObjectStore<Err> {
     /// This will error if the key already existed.
     ///
     /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
-    pub fn add(&self, value: &JsValue) -> impl Future<Output = crate::Result<JsValue, Err>> {
+    pub fn add(&self, value: &JsValue) -> impl Future<Output = crate::Result<JsValue, Infallible>> {
         match self.sys.add(value) {
             Ok(add_req) => {
                 Either::Left(transaction_request(add_req).map(|res| res.map_err(map_add_err)))
@@ -111,7 +107,7 @@ impl<Err> ObjectStore<Err> {
         &self,
         key: &JsValue,
         value: &JsValue,
-    ) -> impl Future<Output = crate::Result<(), Err>> {
+    ) -> impl Future<Output = crate::Result<(), Infallible>> {
         match self.sys.add_with_key(value, key) {
             Ok(add_req) => Either::Left(
                 transaction_request(add_req).map(|res| res.map_err(map_add_err).map(|_| ())),
@@ -125,7 +121,7 @@ impl<Err> ObjectStore<Err> {
     /// This will overwrite the previous value if the key already existed.
     ///
     /// Internally, this uses [`IDBObjectStore::add`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/add).
-    pub fn put(&self, value: &JsValue) -> impl Future<Output = crate::Result<JsValue, Err>> {
+    pub fn put(&self, value: &JsValue) -> impl Future<Output = crate::Result<JsValue, Infallible>> {
         match self.sys.put(value) {
             Ok(add_req) => {
                 Either::Left(transaction_request(add_req).map(|res| res.map_err(map_add_err)))
@@ -143,7 +139,7 @@ impl<Err> ObjectStore<Err> {
         &self,
         key: &JsValue,
         value: &JsValue,
-    ) -> impl Future<Output = crate::Result<(), Err>> {
+    ) -> impl Future<Output = crate::Result<(), Infallible>> {
         match self.sys.put_with_key(value, key) {
             Ok(add_req) => Either::Left(
                 transaction_request(add_req).map(|res| res.map_err(map_add_err).map(|_| ())),
@@ -155,7 +151,7 @@ impl<Err> ObjectStore<Err> {
     /// Clear this object store
     ///
     /// Internally, this uses [`IDBObjectStore::clear`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/clear).
-    pub fn clear(&self) -> impl Future<Output = crate::Result<(), Err>> {
+    pub fn clear(&self) -> impl Future<Output = crate::Result<(), Infallible>> {
         match self.sys.clear() {
             Ok(clear_req) => Either::Left(
                 transaction_request(clear_req).map(|res| res.map_err(map_clear_err).map(|_| ())),
@@ -167,7 +163,7 @@ impl<Err> ObjectStore<Err> {
     /// Count the number of objects in this store
     ///
     /// Internally, this uses [`IDBObjectStore::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/count).
-    pub fn count(&self) -> impl Future<Output = crate::Result<usize, Err>> {
+    pub fn count(&self) -> impl Future<Output = crate::Result<usize, Infallible>> {
         match self.sys.count() {
             Ok(count_req) => Either::Left(
                 transaction_request(count_req)
@@ -180,7 +176,7 @@ impl<Err> ObjectStore<Err> {
     /// Checks whether the provided key exists in this object store
     ///
     /// Internally, this uses [`IDBObjectStore::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/count).
-    pub fn contains(&self, key: &JsValue) -> impl Future<Output = crate::Result<bool, Err>> {
+    pub fn contains(&self, key: &JsValue) -> impl Future<Output = crate::Result<bool, Infallible>> {
         match self.sys.count_with_key(key) {
             Ok(count_req) => Either::Left(
                 transaction_request(count_req)
@@ -198,7 +194,7 @@ impl<Err> ObjectStore<Err> {
     pub fn count_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<usize, Err>> {
+    ) -> impl Future<Output = crate::Result<usize, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -217,7 +213,7 @@ impl<Err> ObjectStore<Err> {
     /// Unfortunately, the IndexedDb API does not indicate whether an object was actually deleted.
     ///
     /// Internally, this uses [`IDBObjectStore::delete`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/delete).
-    pub fn delete(&self, key: &JsValue) -> impl Future<Output = crate::Result<(), Err>> {
+    pub fn delete(&self, key: &JsValue) -> impl Future<Output = crate::Result<(), Infallible>> {
         match self.sys.delete(key) {
             Ok(delete_req) => Either::Left(
                 transaction_request(delete_req).map(|res| res.map_err(map_delete_err).map(|_| ())),
@@ -235,7 +231,7 @@ impl<Err> ObjectStore<Err> {
     pub fn delete_range(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<(), Err>> {
+    ) -> impl Future<Output = crate::Result<(), Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -251,7 +247,7 @@ impl<Err> ObjectStore<Err> {
     /// Get the object with key `key`
     ///
     /// Internally, this uses [`IDBObjectStore::get`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/get).
-    pub fn get(&self, key: &JsValue) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
+    pub fn get(&self, key: &JsValue) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
         match self.sys.get(key) {
             Ok(get_req) => Either::Right(
                 transaction_request(get_req)
@@ -269,7 +265,7 @@ impl<Err> ObjectStore<Err> {
     pub fn get_first_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -289,7 +285,7 @@ impl<Err> ObjectStore<Err> {
     pub fn get_all(
         &self,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
         let get_req = match limit {
             None => self.sys.get_all(),
             Some(limit) => self
@@ -311,7 +307,7 @@ impl<Err> ObjectStore<Err> {
         &self,
         range: impl RangeBounds<JsValue>,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -334,7 +330,7 @@ impl<Err> ObjectStore<Err> {
     pub fn get_first_key_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -354,7 +350,7 @@ impl<Err> ObjectStore<Err> {
     pub fn get_all_keys(
         &self,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
         let get_req = match limit {
             None => self.sys.get_all_keys(),
             Some(limit) => self
@@ -376,7 +372,7 @@ impl<Err> ObjectStore<Err> {
         &self,
         range: impl RangeBounds<JsValue>,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -396,7 +392,7 @@ impl<Err> ObjectStore<Err> {
     /// Get the [`Index`] with the provided name
     ///
     /// Internally, this uses [`IDBObjectStore::index`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/index).
-    pub fn index(&self, name: &str) -> crate::Result<Index<Err>, Err> {
+    pub fn index(&self, name: &str) -> crate::Result<Index, Infallible> {
         Ok(Index::from_sys(self.sys.index(name).map_err(
             |err| match error_name!(&err) {
                 Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
@@ -407,25 +403,24 @@ impl<Err> ObjectStore<Err> {
     }
 
     /// Open a [`Cursor`] on this object store
-    pub fn cursor(&self) -> CursorBuilder<Err> {
+    pub fn cursor(&self) -> CursorBuilder {
         CursorBuilder::from_store(self.sys.clone())
     }
 }
 
 /// Helper to build indexes over an [`ObjectStore`]
-pub struct IndexBuilder<'a, Err> {
+pub struct IndexBuilder<'a> {
     store: IdbObjectStore,
     name: &'a str,
     key_path: JsValue,
     options: IdbIndexParameters,
-    _phantom: PhantomData<Err>,
 }
 
-impl<'a, Err> IndexBuilder<'a, Err> {
+impl<'a> IndexBuilder<'a> {
     /// Create the index
     ///
     /// Internally, this uses [`IDBObjectStore::createIndex`](https://developer.mozilla.org/en-US/docs/Web/API/IDBObjectStore/createIndex).
-    pub fn create(self) -> crate::Result<(), Err> {
+    pub fn create(self) -> crate::Result<(), Infallible> {
         self.store
             .create_index_with_str_sequence_and_optional_parameters(
                 self.name,

@@ -6,7 +6,7 @@ use crate::{
     CursorBuilder,
 };
 use futures_util::future::{Either, FutureExt};
-use std::{future::Future, marker::PhantomData, ops::RangeBounds};
+use std::{convert::Infallible, future::Future, ops::RangeBounds};
 use web_sys::{wasm_bindgen::JsValue, IdbIndex};
 
 #[cfg(doc)]
@@ -18,23 +18,21 @@ use crate::Cursor;
 /// Most of the functions here take a [`JsValue`] as the key(s) to use in the index. If the index was
 /// built with a compound key, then you should use eg. `js_sys::Array::from_iter([key_1, key_2])` as
 /// the key.
-pub struct Index<Err> {
+pub struct Index {
     sys: IdbIndex,
-    _phantom: PhantomData<Err>,
 }
 
-impl<Err> Index<Err> {
-    pub(crate) fn from_sys(sys: IdbIndex) -> Index<Err> {
+impl Index {
+    pub(crate) fn from_sys(sys: IdbIndex) -> Index {
         Index {
             sys,
-            _phantom: PhantomData,
         }
     }
 
     /// Checks whether the provided key (for this index) already exists
     ///
     /// Internally, this uses [`IDBIndex::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/count).
-    pub fn contains(&self, key: &JsValue) -> impl Future<Output = crate::Result<bool, Err>> {
+    pub fn contains(&self, key: &JsValue) -> impl Future<Output = crate::Result<bool, Infallible>> {
         match self.sys.count_with_key(key) {
             Ok(count_req) => Either::Right(
                 transaction_request(count_req)
@@ -50,7 +48,7 @@ impl<Err> Index<Err> {
     pub fn count_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<usize, Err>> {
+    ) -> impl Future<Output = crate::Result<usize, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -67,7 +65,7 @@ impl<Err> Index<Err> {
     /// Get the object with key `key` for this index
     ///
     /// Internally, this uses [`IDBIndex::get`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/get).
-    pub fn get(&self, key: &JsValue) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
+    pub fn get(&self, key: &JsValue) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
         match self.sys.get(key) {
             Ok(get_req) => Either::Right(
                 transaction_request(get_req)
@@ -85,7 +83,7 @@ impl<Err> Index<Err> {
     pub fn get_first_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -105,7 +103,7 @@ impl<Err> Index<Err> {
     pub fn get_all(
         &self,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
         let get_req = match limit {
             None => self.sys.get_all(),
             Some(limit) => self
@@ -128,7 +126,7 @@ impl<Err> Index<Err> {
         &self,
         range: impl RangeBounds<JsValue>,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -151,7 +149,7 @@ impl<Err> Index<Err> {
     pub fn get_first_key_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<Option<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -171,7 +169,7 @@ impl<Err> Index<Err> {
     pub fn get_all_keys(
         &self,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
         let get_req = match limit {
             None => self.sys.get_all_keys(),
             Some(limit) => self
@@ -194,7 +192,7 @@ impl<Err> Index<Err> {
         &self,
         range: impl RangeBounds<JsValue>,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Err>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -212,7 +210,7 @@ impl<Err> Index<Err> {
     }
 
     /// Open a [`Cursor`] on this index
-    pub fn cursor(&self) -> CursorBuilder<Err> {
+    pub fn cursor(&self) -> CursorBuilder {
         CursorBuilder::from_index(self.sys.clone())
     }
 }

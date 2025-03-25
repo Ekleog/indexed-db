@@ -3,7 +3,7 @@ use crate::{
     ObjectStore,
 };
 use futures_channel::oneshot;
-use std::marker::PhantomData;
+use std::convert::Infallible;
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
@@ -13,16 +13,16 @@ pub(crate) mod runner;
 
 /// Wrapper for [`IDBTransaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
 #[derive(Debug)]
-pub struct Transaction<Err> {
+pub struct Transaction {
     sys: IdbTransaction,
-    _phantom: PhantomData<Err>,
+    // _phantom: PhantomData<Err>,
 }
 
-impl<Err> Transaction<Err> {
-    pub(crate) fn from_sys(sys: IdbTransaction) -> Transaction<Err> {
+impl Transaction {
+    pub(crate) fn from_sys(sys: IdbTransaction) -> Transaction {
         Transaction {
             sys,
-            _phantom: PhantomData,
+            // _phantom: PhantomData,
         }
     }
 
@@ -33,7 +33,7 @@ impl<Err> Transaction<Err> {
     /// Returns an [`ObjectStore`] that can be used to operate on data in this transaction
     ///
     /// Internally, this uses [`IDBTransaction::objectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction/objectStore).
-    pub fn object_store(&self, name: &str) -> crate::Result<ObjectStore<Err>, Err> {
+    pub fn object_store(&self, name: &str) -> crate::Result<ObjectStore, Infallible> {
         Ok(ObjectStore::from_sys(self.sys.object_store(name).map_err(
             |err| match error_name!(&err) {
                 Some("NotFoundError") => crate::Error::DoesNotExist,
@@ -97,7 +97,7 @@ impl TransactionBuilder {
     //   untested and unsupported code path.
     pub async fn run<Ret, Err>(
         self,
-        transaction: impl 'static + AsyncFnOnce(Transaction<Err>) -> crate::Result<Ret, Err>,
+        transaction: impl 'static + AsyncFnOnce(Transaction) -> crate::Result<Ret, Err>,
     ) -> crate::Result<Ret, Err>
     where
         Ret: 'static,
