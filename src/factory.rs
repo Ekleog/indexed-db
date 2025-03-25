@@ -98,13 +98,13 @@ impl Factory {
         &self,
         name: &str,
         version: u32,
-        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent) -> crate::Result<Result<(), Err>>,
-    ) -> crate::Result<Result<Database, Err>>
+        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent) -> Result<(), crate::CallbackError<Err>>,
+    ) -> Result<Database, crate::CallbackError<Err>>
     where
         Err: 'static,
     {
         if version == 0 {
-            return Err(crate::Error::VersionMustNotBeZero);
+            return Err(crate::Error::VersionMustNotBeZero.into());
         }
 
         let open_req = self
@@ -141,10 +141,8 @@ impl Factory {
             futures_util::select! {
                 upgrade_res = upgrade_res_rx => {
                     let upgrade_res = upgrade_res.expect("Closure dropped before its end of scope");
-                    match upgrade_res {
-                        Ok(Ok(())) => {},
-                        Ok(Err(err)) => return Ok(Err(err)),  // User error
-                        Err(err) => return Err(err),  // IndexedDb error
+                    if let Err(err) = upgrade_res {
+                        return Err(err);
                     }
                 },
                 _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
@@ -158,7 +156,7 @@ impl Factory {
             .dyn_into::<IdbDatabase>()
             .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
 
-        Ok(Ok(Database::from_sys(db)))
+        Ok(Database::from_sys(db))
     }
 
     /// Open a database at the latest version

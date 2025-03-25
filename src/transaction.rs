@@ -96,8 +96,8 @@ impl TransactionBuilder {
     //   untested and unsupported code path.
     pub async fn run<Ret, Err>(
         self,
-        transaction: impl 'static + AsyncFnOnce(Transaction) -> crate::Result<Result<Ret, Err>>,
-    ) -> crate::Result<Result<Ret, Err>>
+        transaction: impl 'static + AsyncFnOnce(Transaction) -> Result<Ret, crate::CallbackError<Err>>,
+    ) -> Result<Ret, crate::CallbackError<Err>>
     where
         Ret: 'static,
         Err: 'static,

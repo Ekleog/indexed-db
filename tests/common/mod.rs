@@ -30,16 +30,15 @@ async fn smoke_test() {
 
     // Factory::open
     factory
-        .open::<()>("foo", 0, async move |_| Ok(Ok(())))
+        .open::<()>("foo", 0, async move |_| Ok(()))
         .await
         .unwrap_err();
     factory
-        .open::<()>("foo", 2, async move |_| Ok(Ok(())))
+        .open::<()>("foo", 2, async move |_| Ok(()))
         .await
-        .unwrap()
         .unwrap();
     factory
-        .open::<()>("foo", 1, async move |_| Ok(Ok(())))
+        .open::<()>("foo", 1, async move |_| Ok(()))
         .await
         .unwrap_err();
 
@@ -57,10 +56,9 @@ async fn smoke_test() {
                 .create()?;
             let stuffs = evt.build_object_store("stuffs").auto_increment().create()?;
             stuffs.build_index("contents", "").create()?;
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
     assert_eq!(db.name(), "bar");
     assert_eq!(db.version(), 1);
@@ -70,10 +68,9 @@ async fn smoke_test() {
     let db = factory
         .open::<()>("bar", 2, async move |evt| {
             evt.delete_object_store("things")?;
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
     assert_eq!(db.name(), "bar");
     assert_eq!(db.version(), 2);
@@ -100,10 +97,9 @@ async fn smoke_test() {
             assert_eq!(objects.count().await?, 1);
             assert!(objects.contains(&JsString::from("key")).await?);
 
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
     db.transaction(&["objects", "stuffs"])
         .rw()
@@ -131,10 +127,9 @@ async fn smoke_test() {
             stuffs.delete(&Number::from(1)).await?;
             assert_eq!(stuffs.count().await?, 0);
 
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
     db.transaction(&["objects"])
         .rw()
@@ -168,10 +163,9 @@ async fn smoke_test() {
                 Vec::<JsValue>::new(),
             );
 
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
     db.transaction(&["stuffs"])
         .rw()
@@ -217,10 +211,9 @@ async fn smoke_test() {
             );
             assert_eq!(stuffs.count().await.unwrap(), 0);
 
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 }
 
@@ -234,10 +227,9 @@ async fn auto_rollback() {
     let db = factory
         .open::<()>("baz", 1, async move |evt| {
             evt.build_object_store("data").auto_increment().create()?;
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 
     // Rollback due to IndexedDb error
@@ -248,7 +240,7 @@ async fn auto_rollback() {
             t.object_store("data")?.add(&JsString::from("foo1")).await?;
             t.object_store("data")?.add(&JsString::from("bar1")).await?;
             // Something went wrong!
-            return Err(indexed_db::Error::DoesNotExist);
+            return Err(indexed_db::Error::DoesNotExist.into());
         })
         .await
         .unwrap_err();
@@ -261,30 +253,27 @@ async fn auto_rollback() {
             t.object_store("data")?.add(&JsString::from("foo2")).await?;
             t.object_store("data")?.add(&JsString::from("bar2")).await?;
             // Something went wrong!
-            return Ok(Err(()));
+            return Err(indexed_db::CallbackError::User(()));
         })
         .await
-        .unwrap()
         .unwrap_err();
 
     db.transaction(&["data"])
         .rw()
         .run::<_, ()>(async move |t| {
             t.object_store("data")?.add(&JsString::from("baz")).await?;
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 
     db.transaction(&["data"])
         .rw()
         .run::<_, ()>(async move |t| {
             assert_eq!(t.object_store("data")?.count().await?, 1);
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 }
 
@@ -295,10 +284,9 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
     let db = factory
         .open::<()>("quux", 1, async move |evt| {
             evt.build_object_store("data").create()?;
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 
     db.transaction(&["data"])
@@ -307,10 +295,9 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
             t.object_store("data")?
                 .add_kv(&JsString::from("key1"), &JsString::from("foo"))
                 .await?;
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 
     db.transaction(&["data"])
@@ -326,10 +313,9 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
             t.object_store("data")?
                 .add_kv(&JsString::from("key2"), &JsString::from("baz"))
                 .await?;
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 
     db.transaction(&["data"])
@@ -343,10 +329,9 @@ async fn duplicate_insert_returns_proper_error_and_does_not_abort() {
                 t.object_store("data")?.get_all(None).await?,
                 vec![JsValue::from("foo"), JsValue::from("baz")]
             );
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 }
 
@@ -357,10 +342,9 @@ async fn typed_array_keys() {
     let db = factory
         .open::<()>("db12", 1, async move |evt| {
             evt.build_object_store("data").create()?;
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 
     db.transaction(&["data"])
@@ -384,9 +368,8 @@ async fn typed_array_keys() {
                     .await?
             );
 
-            Ok(Ok(()))
+            Ok(())
         })
         .await
-        .unwrap()
         .unwrap();
 }

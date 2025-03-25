@@ -7,10 +7,16 @@ use web_sys::{
 /// Type alias for convenience
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Error type for all errors from this crate, plus a user-defined error.
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum CallbackError<E> {
+    #[error(transparent)]
+    IndexedDb(#[from] Error),
+    #[error("User error: {0}")]
+    User(E),
+}
+
 /// Error type for all errors from this crate
-///
-/// The `E` generic argument is used for user-defined error types, eg. when
-/// the user provides a callback.
 #[derive(Clone, Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum Error {

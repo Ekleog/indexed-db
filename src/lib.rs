@@ -19,7 +19,7 @@ mod utils;
 
 pub use cursor::{Cursor, CursorBuilder, CursorDirection};
 pub use database::Database;
-pub use error::{Error, Result};
+pub use error::{Error, CallbackError, Result};
 pub use factory::{Factory, ObjectStoreBuilder, VersionChangeEvent};
 pub use index::Index;
 pub use object_store::{IndexBuilder, ObjectStore};
