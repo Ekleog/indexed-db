@@ -14,9 +14,10 @@ async fn other_awaits_panic() {
     let db = factory
         .open::<()>("baz", 1, async move |evt| {
             evt.build_object_store("data").auto_increment().create()?;
-            Ok(())
+            Ok(Ok(()))
         })
         .await
+        .unwrap()
         .unwrap();
 
     let (tx, rx) = futures_channel::oneshot::channel();
@@ -25,11 +26,14 @@ async fn other_awaits_panic() {
         .rw()
         .run::<_, anyhow::Error>(async move |t| {
             t.object_store("data")?.add(&JsString::from("foo")).await?;
-            rx.await.context("awaiting for something external")?;
+            if let Err(err) = rx.await.context("awaiting for something external") {
+                return Ok(Err(err));
+            }
             t.object_store("data")?.add(&JsString::from("bar")).await?;
-            Ok(())
+            Ok(Ok(()))
         })
         .await
+        .unwrap()
         .unwrap();
 
     tx.send(()).unwrap();
@@ -48,10 +52,13 @@ async fn await_in_versionchange_panics() {
     factory
         .open::<anyhow::Error>("baz", 1, async move |evt| {
             evt.build_object_store("data").auto_increment().create()?;
-            rx.await.context("awaiting for something external")?;
-            Ok(())
+            if let Err(err) = rx.await.context("awaiting for something external") {
+                return Ok(Err(err));
+            }
+            Ok(Ok(()))
         })
         .await
+        .unwrap()
         .unwrap();
 
     tx.send(()).unwrap();

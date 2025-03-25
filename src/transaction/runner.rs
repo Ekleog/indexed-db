@@ -35,8 +35,8 @@ pub struct RunnableTransaction {
 impl RunnableTransaction {
     pub fn new<R, E>(
         transaction: IdbTransaction,
-        transaction_contents: impl 'static + Future<Output = Result<R, E>>,
-        send_res_to: oneshot::Sender<Result<R, E>>,
+        transaction_contents: impl 'static + Future<Output = crate::Result<Result<R, E>>>,
+        send_res_to: oneshot::Sender<crate::Result<Result<R, E>>>,
         send_polled_forbidden_thing_to: oneshot::Sender<PolledForbiddenThing>,
     ) -> RunnableTransaction
     where
@@ -48,7 +48,7 @@ impl RunnableTransaction {
             inflight_requests: Cell::new(0),
             future: RefCell::new(Box::pin(async move {
                 let result = transaction_contents.await;
-                if result.is_err() {
+                if matches!(result, Err(_) | Ok(Err(_))) {
                     // The transaction failed. We should abort it.
                     let _ = transaction.abort();
                 }

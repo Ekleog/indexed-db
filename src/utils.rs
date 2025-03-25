@@ -64,7 +64,7 @@ pub(crate) fn err_from_event(evt: web_sys::Event) -> DomException {
         .expect("IDBRequest::error did not return a DOMException")
 }
 
-pub(crate) fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_add_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("ReadOnlyError") => crate::Error::ReadOnly,
         Some("TransactionInactiveError") => {
@@ -78,7 +78,7 @@ pub(crate) fn map_add_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
-pub(crate) fn map_clear_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_clear_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("ReadOnlyError") => crate::Error::ReadOnly,
         Some("TransactionInactiveError") => {
@@ -99,7 +99,7 @@ pub(crate) fn map_count_res(res: JsValue) -> usize {
     num.value_of() as usize
 }
 
-pub(crate) fn map_count_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_count_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
         Some("TransactionInactiveError") => {
@@ -110,7 +110,7 @@ pub(crate) fn map_count_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
-pub(crate) fn map_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_delete_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("ReadOnlyError") => crate::Error::ReadOnly,
         Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
@@ -122,7 +122,7 @@ pub(crate) fn map_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
-pub(crate) fn map_get_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_get_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
         Some("TransactionInactiveError") => {
@@ -133,7 +133,7 @@ pub(crate) fn map_get_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
-pub(crate) fn map_open_cursor_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_open_cursor_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::ObjectStoreWasRemoved,
         Some("TransactionInactiveError") => {
@@ -144,7 +144,7 @@ pub(crate) fn map_open_cursor_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
-pub(crate) fn map_cursor_advance_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_cursor_advance_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::CursorCompleted,
         Some("TransactionInactiveError") => {
@@ -155,7 +155,7 @@ pub(crate) fn map_cursor_advance_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
-pub(crate) fn map_cursor_advance_until_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_cursor_advance_until_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::CursorCompleted,
         Some("TransactionInactiveError") => {
@@ -166,7 +166,7 @@ pub(crate) fn map_cursor_advance_until_err<Err>(err: JsValue) -> crate::Error<Er
     }
 }
 
-pub(crate) fn map_cursor_advance_until_primary_key_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_cursor_advance_until_primary_key_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::CursorCompleted,
         Some("TransactionInactiveError") => {
@@ -178,7 +178,7 @@ pub(crate) fn map_cursor_advance_until_primary_key_err<Err>(err: JsValue) -> cra
     }
 }
 
-pub(crate) fn map_cursor_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_cursor_delete_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::CursorCompleted,
         Some("TransactionInactiveError") => {
@@ -189,7 +189,7 @@ pub(crate) fn map_cursor_delete_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
-pub(crate) fn map_cursor_update_err<Err>(err: JsValue) -> crate::Error<Err> {
+pub(crate) fn map_cursor_update_err(err: JsValue) -> crate::Error {
     match error_name!(&err) {
         Some("InvalidStateError") => crate::Error::CursorCompleted,
         Some("TransactionInactiveError") => {
@@ -202,7 +202,7 @@ pub(crate) fn map_cursor_update_err<Err>(err: JsValue) -> crate::Error<Err> {
     }
 }
 
-pub(crate) fn make_key_range<Err>(range: impl RangeBounds<JsValue>) -> crate::Result<JsValue, Err> {
+pub(crate) fn make_key_range(range: impl RangeBounds<JsValue>) -> crate::Result<JsValue> {
     match (range.start_bound(), range.end_bound()) {
         (Bound::Unbounded, Bound::Unbounded) => return Err(crate::Error::InvalidRange),
         (Bound::Unbounded, Bound::Included(b)) => IdbKeyRange::upper_bound_with_open(b, false),

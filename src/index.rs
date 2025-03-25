@@ -6,7 +6,7 @@ use crate::{
     CursorBuilder,
 };
 use futures_util::future::{Either, FutureExt};
-use std::{convert::Infallible, future::Future, ops::RangeBounds};
+use std::{future::Future, ops::RangeBounds};
 use web_sys::{wasm_bindgen::JsValue, IdbIndex};
 
 #[cfg(doc)]
@@ -32,7 +32,7 @@ impl Index {
     /// Checks whether the provided key (for this index) already exists
     ///
     /// Internally, this uses [`IDBIndex::count`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/count).
-    pub fn contains(&self, key: &JsValue) -> impl Future<Output = crate::Result<bool, Infallible>> {
+    pub fn contains(&self, key: &JsValue) -> impl Future<Output = crate::Result<bool>> {
         match self.sys.count_with_key(key) {
             Ok(count_req) => Either::Right(
                 transaction_request(count_req)
@@ -48,7 +48,7 @@ impl Index {
     pub fn count_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<usize, Infallible>> {
+    ) -> impl Future<Output = crate::Result<usize>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -65,7 +65,7 @@ impl Index {
     /// Get the object with key `key` for this index
     ///
     /// Internally, this uses [`IDBIndex::get`](https://developer.mozilla.org/en-US/docs/Web/API/IDBIndex/get).
-    pub fn get(&self, key: &JsValue) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
+    pub fn get(&self, key: &JsValue) -> impl Future<Output = crate::Result<Option<JsValue>>> {
         match self.sys.get(key) {
             Ok(get_req) => Either::Right(
                 transaction_request(get_req)
@@ -83,7 +83,7 @@ impl Index {
     pub fn get_first_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -103,7 +103,7 @@ impl Index {
     pub fn get_all(
         &self,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>>> {
         let get_req = match limit {
             None => self.sys.get_all(),
             Some(limit) => self
@@ -126,7 +126,7 @@ impl Index {
         &self,
         range: impl RangeBounds<JsValue>,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -149,7 +149,7 @@ impl Index {
     pub fn get_first_key_in(
         &self,
         range: impl RangeBounds<JsValue>,
-    ) -> impl Future<Output = crate::Result<Option<JsValue>, Infallible>> {
+    ) -> impl Future<Output = crate::Result<Option<JsValue>>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),
@@ -169,7 +169,7 @@ impl Index {
     pub fn get_all_keys(
         &self,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>>> {
         let get_req = match limit {
             None => self.sys.get_all_keys(),
             Some(limit) => self
@@ -192,7 +192,7 @@ impl Index {
         &self,
         range: impl RangeBounds<JsValue>,
         limit: Option<u32>,
-    ) -> impl Future<Output = crate::Result<Vec<JsValue>, Infallible>> {
+    ) -> impl Future<Output = crate::Result<Vec<JsValue>>> {
         let range = match make_key_range(range) {
             Ok(range) => range,
             Err(e) => return Either::Left(std::future::ready(Err(e))),

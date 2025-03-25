@@ -4,7 +4,7 @@ use crate::{
 };
 use futures_channel::oneshot;
 use futures_util::{pin_mut, FutureExt};
-use std::{cell::Cell, convert::Infallible, marker::PhantomData, rc::Rc};
+use std::{cell::Cell, rc::Rc};
 use web_sys::{
     js_sys::{self, Function, JsString},
     wasm_bindgen::{closure::Closure, JsCast, JsValue},
@@ -22,7 +22,7 @@ impl Factory {
     /// Retrieve the global `Factory` from the browser
     ///
     /// This internally uses [`indexedDB`](https://developer.mozilla.org/en-US/docs/Web/API/indexedDB).
-    pub fn get() -> crate::Result<Factory, Infallible> {
+    pub fn get() -> crate::Result<Factory> {
         let indexed_db = if let Some(window) = web_sys::window() {
             window.indexed_db()
         } else if let Ok(worker_scope) = js_sys::global().dyn_into::<WorkerGlobalScope>() {
@@ -47,7 +47,7 @@ impl Factory {
         &self,
         lhs: &JsValue,
         rhs: &JsValue,
-    ) -> crate::Result<std::cmp::Ordering, Infallible> {
+    ) -> crate::Result<std::cmp::Ordering> {
         use std::cmp::Ordering::*;
         self.sys
             .cmp(lhs, rhs)
@@ -71,7 +71,7 @@ impl Factory {
     /// a database that does not exist will result in a successful result.
     ///
     /// This internally uses [`IDBFactory::deleteDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/deleteDatabase)
-    pub async fn delete_database(&self, name: &str) -> crate::Result<(), Infallible> {
+    pub async fn delete_database(&self, name: &str) -> crate::Result<()> {
         generic_request(
             self.sys
                 .delete_database(name)
@@ -98,8 +98,8 @@ impl Factory {
         &self,
         name: &str,
         version: u32,
-        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent) -> crate::Result<(), Err>,
-    ) -> crate::Result<Database, Err>
+        on_upgrade_needed: impl 'static + AsyncFnOnce(VersionChangeEvent) -> crate::Result<Result<(), Err>>,
+    ) -> crate::Result<Result<Database, Err>>
     where
         Err: 'static,
     {
@@ -141,7 +141,11 @@ impl Factory {
             futures_util::select! {
                 upgrade_res = upgrade_res_rx => {
                     let upgrade_res = upgrade_res.expect("Closure dropped before its end of scope");
-                    upgrade_res?;
+                    match upgrade_res {
+                        Ok(Ok(())) => {},
+                        Ok(Err(err)) => return Ok(Err(err)),  // User error
+                        Err(err) => return Err(err),  // IndexedDb error
+                    }
                 },
                 _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
             }
@@ -154,7 +158,7 @@ impl Factory {
             .dyn_into::<IdbDatabase>()
             .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
 
-        Ok(Database::from_sys(db))
+        Ok(Ok(Database::from_sys(db)))
     }
 
     /// Open a database at the latest version
@@ -164,7 +168,7 @@ impl Factory {
     ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
-    pub async fn open_latest_version(&self, name: &str) -> crate::Result<Database, Infallible> {
+    pub async fn open_latest_version(&self, name: &str) -> crate::Result<Database> {
         let open_req = self.sys.open(name).map_err(crate::Error::from_js_value)?;
 
         let completion_fut = generic_request(open_req.clone().into())
@@ -252,7 +256,7 @@ impl VersionChangeEvent {
     /// Deletes an [`ObjectStore`]
     ///
     /// Internally, this uses [`IDBDatabase::deleteObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/deleteObjectStore).
-    pub fn delete_object_store(&self, name: &str) -> crate::Result<(), Infallible> {
+    pub fn delete_object_store(&self, name: &str) -> crate::Result<()> {
         self.db.as_sys().delete_object_store(name).map_err(|err| match error_name!(&err) {
                 Some("InvalidStateError") => crate::Error::InvalidCall,
                 Some("TransactionInactiveError") => panic!("Tried to delete an object store with the `versionchange` transaction having already aborted"),
@@ -280,7 +284,7 @@ impl<'a> ObjectStoreBuilder<'a> {
     /// Create the object store
     ///
     /// Internally, this uses [`IDBDatabase::createObjectStore`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/createObjectStore).
-    pub fn create(self) -> crate::Result<ObjectStore, Infallible> {
+    pub fn create(self) -> crate::Result<ObjectStore> {
         self.db
             .create_object_store_with_optional_parameters(self.name, &self.options)
             .map_err(

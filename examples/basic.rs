@@ -16,10 +16,10 @@ async fn example() -> anyhow::Result<()> {
             // You can also add objects from this callback
             store.add(&JsString::from("foo")).await?;
 
-            Ok(())
+            Ok(Ok(()))
         })
         .await
-        .context("creating the 'database' IndexedDB")?;
+        .context("creating the 'database' IndexedDB")??;
 
     // In a transaction, add two records
     db.transaction(&["store"])
@@ -28,23 +28,23 @@ async fn example() -> anyhow::Result<()> {
             let store = t.object_store("store")?;
             store.add(&JsString::from("bar")).await?;
             store.add(&JsString::from("baz")).await?;
-            Ok(())
+            Ok(Ok(()))
         })
-        .await?;
+        .await??;
 
     // In another transaction, read the first record
     db.transaction(&["store"])
         .run::<_, std::io::Error>(async move |t| {
             let data = t.object_store("store")?.get_all(Some(1)).await?;
             if data.len() != 1 {
-                Err(std::io::Error::new(
+                return Ok(Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "Unexpected data length",
-                ))?;
+                )));
             }
-            Ok(())
+            Ok(Ok(()))
         })
-        .await?;
+        .await??;
 
     // If we return `Err` (or panic) from a transaction, then it will abort
     db.transaction(&["store"])
@@ -54,12 +54,12 @@ async fn example() -> anyhow::Result<()> {
             store.add(&JsString::from("quux")).await?;
             if store.count().await? > 3 {
                 // Oops! In this example, we have 4 items by this point
-                Err(std::io::Error::new(
+                return Ok(Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     "Too many objects in store",
-                ))?;
+                )));
             }
-            Ok(())
+            Ok(Ok(()))
         })
         .await
         .unwrap_err();
@@ -69,9 +69,9 @@ async fn example() -> anyhow::Result<()> {
         .run::<_, Infallible>(async move |t| {
             let num_items = t.object_store("store")?.count().await?;
             assert_eq!(num_items, 3);
-            Ok(())
+            Ok(Ok(()))
         })
-        .await?;
+        .await??;
 
     // More complex example: using cursors to iterate over a store
     db.transaction(&["store"])
@@ -84,9 +84,9 @@ async fn example() -> anyhow::Result<()> {
             }
             assert_eq!(all_items.len(), 3);
             assert_eq!(all_items[0], **JsString::from("foo"));
-            Ok(())
+            Ok(Ok(()))
         })
-        .await?;
+        .await??;
 
     Ok(())
 }
