@@ -1,9 +1,118 @@
 use indexed_db::{Error, Factory};
 use wasm_bindgen_test::wasm_bindgen_test;
 use web_sys::{
-    js_sys::{JsString, Number, Uint8Array},
-    wasm_bindgen::JsValue,
+    js_sys::{global, JsString, Number, Uint8Array},
+    wasm_bindgen::{JsCast, JsValue},
+    WorkerGlobalScope,
 };
+
+/// Returns the duration in milliseconds, with the result
+async fn time_it<R>(cb: impl std::future::Future<Output = R>) -> (f64, R) {
+    let now = {
+
+        let performance = if let Some(window) = web_sys::window() {
+            window.performance()
+        } else if let Ok(worker_scope) = global().dyn_into::<WorkerGlobalScope>() {
+            worker_scope.performance()
+        } else {
+            None
+        }.expect("No `performance` available (not in a browser environment?)");
+        move || performance.now()
+    };
+    let start_ms = now();
+    let ret = cb.await;
+    let elapsed_ms = now() - start_ms;
+    (elapsed_ms, ret)
+}
+
+#[wasm_bindgen_test]
+async fn close_and_delete_before_reopen() {
+    // tracing_wasm::set_as_global_default();
+    // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
+    const DATABASE_NAME: &str = "close_and_delete_before_reopen";
+    const ITERATIONS: usize = 10;
+
+    let (delete_duration_ms, _) = time_it(async {
+
+        for _ in 0..ITERATIONS {
+            let factory = Factory::get().unwrap();
+
+            factory.delete_database(DATABASE_NAME).await.unwrap();
+
+            let _db = factory
+                .open::<()>(DATABASE_NAME, 1, async move |_| Ok(()))
+                .await
+                .unwrap();
+
+            // Here the database wrapper got dropped which should trigger database close.
+        }
+
+    })
+    .await;
+
+    // Deleting the database should be almost instantaneous in theory.
+    // However this operation will hang as long as the database is still opened,
+    // which can last for 10s of seconds if our code forget to close is (in
+    // which case the close will only occur when the underlying javascript
+    // object got garbage collected...).
+    assert!(
+        // 1s per iteration should be plenty under normal circumstances
+        delete_duration_ms < 1000f64 * ITERATIONS as f64,
+        "Deleting the database took too long: {}ms",
+        delete_duration_ms
+    );
+}
+
+#[wasm_bindgen_test]
+async fn into_manual_close() {
+    // tracing_wasm::set_as_global_default();
+    // std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+
+    const DATABASE_NAME: &str = "into_manual_close";
+
+    let factory = Factory::get().unwrap();
+    factory.delete_database(DATABASE_NAME).await.unwrap();
+
+    let manual_close_db = {
+        let db = factory
+            .open::<()>(DATABASE_NAME, 1, async move |evt| {
+                evt.build_object_store("objects")
+                    .auto_increment()
+                    .create()?;
+                Ok(())
+            })
+            .await
+            .unwrap();
+        db.into_manual_close()
+    };
+
+    // `db` has been dropped, but we should still be able to use `manual_close_db`.
+    manual_close_db
+        .transaction(&["objects"])
+        .run::<_, ()>(async move |t| {
+            let objects = t.object_store("objects")?;
+            assert!(objects.get(&JsString::from("nokey")).await?.is_none());
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    manual_close_db.close();
+
+    // Now the database is fully closed
+    let outcome = manual_close_db
+        .transaction(&["objects"])
+        .run(async move |_| -> Result<(), Error<()>> {
+            unreachable!("Database is closed");
+        })
+        .await;
+    assert!(
+        matches!(outcome, Err(Error::DatabaseIsClosed)),
+        "Unexpected outcome: {:?}",
+        outcome
+    );
+}
 
 #[wasm_bindgen_test]
 async fn smoke_test() {
@@ -63,7 +172,7 @@ async fn smoke_test() {
     assert_eq!(db.name(), "bar");
     assert_eq!(db.version(), 1);
     assert_eq!(db.object_store_names(), &["objects", "stuffs", "things"]);
-    db.close();
+    db.close(); // Close the database
 
     let db = factory
         .open::<()>("bar", 2, async move |evt| {

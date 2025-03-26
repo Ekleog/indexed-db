@@ -2,6 +2,58 @@ use crate::transaction::TransactionBuilder;
 use web_sys::IdbDatabase;
 
 /// Wrapper for [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)
+///
+/// Note that dropping this wrapper automatically calls [`IDBDatabase::close`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase/close)
+/// to request the underlying database connection to be closed (the actual database close
+/// occuring asynchronously with no way for the client to identify when this happens).
+#[derive(Debug)]
+pub struct OwnedDatabase(
+    /// This field only switches to `None` to prevent database close on drop when
+    /// `OwnedDatabase::into_manual_close` is used.
+    pub(crate) Option<Database>,
+);
+
+impl OwnedDatabase {
+    /// Convert this into a [`Database`] that does not automatically close the connection when dropped.
+    ///
+    /// The resulting [`Database`] is `Clone` without requiring reference-counting, which can be more convenient than refcounting [`OwnedDatabase`]
+    pub fn into_manual_close(mut self) -> Database {
+        self.0.take().expect("Database already taken")
+    }
+
+    /// Explicitly closes this database connection
+    ///
+    /// Calling this method is strictly equivalent to dropping the [`OwnedDatabase`] instance.
+    /// This method is only provided for symmetry with [`Database::close`].
+    pub fn close(self) {
+        // `self` is dropped here
+    }
+}
+
+impl std::ops::Deref for OwnedDatabase {
+    type Target = Database;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_ref().expect("Database already taken")
+    }
+}
+
+impl Drop for OwnedDatabase {
+    fn drop(&mut self) {
+        match self.0.take() {
+            Some(db) => db.close(),
+            None => {} // Database was taken with `into_manual_close`
+        }
+    }
+}
+
+/// Wrapper for [`IDBDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBDatabase)
+///
+/// Unlike[``OwnedDatabase`], this does not automatically close the database connection when dropped.
+///
+/// Note that failing to close the database connection prior to dropping this wrapper will let the connection
+/// remain open until the Javascript garbage collector kicks in, which typically can take tens of seconds
+/// during which any new attempt to e.g. delete or open with upgrade the database will hang.
 #[derive(Debug)]
 pub struct Database {
     sys: IdbDatabase,
