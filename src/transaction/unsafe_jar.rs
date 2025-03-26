@@ -24,21 +24,25 @@ use web_sys::{
     IdbRequest, IdbTransaction,
 };
 
-pub struct PolledForbiddenThing;
+pub enum TransactionResult<R> {
+    PolledForbiddenThing,
+    Done(R),
+}
 
 pub struct RunnableTransaction<'f> {
     transaction: IdbTransaction,
     inflight_requests: Cell<usize>,
     future: RefCell<Pin<Box<dyn 'f + Future<Output = ()>>>>,
-    send_polled_forbidden_thing_to: RefCell<Option<oneshot::Sender<PolledForbiddenThing>>>,
+    polled_forbidden_thing: Box<dyn 'f + Fn()>,
+    finished: RefCell<Option<oneshot::Sender<()>>>,
 }
 
 impl<'f> RunnableTransaction<'f> {
     pub fn new<R, E>(
         transaction: IdbTransaction,
         transaction_contents: impl 'f + Future<Output = Result<R, E>>,
-        send_res_to: oneshot::Sender<Result<R, E>>,
-        send_polled_forbidden_thing_to: oneshot::Sender<PolledForbiddenThing>,
+        result: &'f RefCell<Option<TransactionResult<Result<R, E>>>>,
+        finished: oneshot::Sender<()>,
     ) -> RunnableTransaction<'f>
     where
         R: 'f,
@@ -48,17 +52,22 @@ impl<'f> RunnableTransaction<'f> {
             transaction: transaction.clone(),
             inflight_requests: Cell::new(0),
             future: RefCell::new(Box::pin(async move {
-                let result = transaction_contents.await;
-                if result.is_err() {
+                let transaction_result = transaction_contents.await;
+                if transaction_result.is_err() {
                     // The transaction failed. We should abort it.
                     let _ = transaction.abort();
                 }
-                if send_res_to.send(result).is_err() {
-                    // Transaction was cancelled by being dropped, abort it
-                    let _ = transaction.abort();
-                }
+                assert!(
+                    result
+                        .replace(Some(TransactionResult::Done(transaction_result)))
+                        .is_none(),
+                    "Transaction completed multiple times",
+                );
             })),
-            send_polled_forbidden_thing_to: RefCell::new(Some(send_polled_forbidden_thing_to)),
+            polled_forbidden_thing: Box::new(move || {
+                *result.borrow_mut() = Some(TransactionResult::PolledForbiddenThing);
+            }),
+            finished: RefCell::new(Some(finished)),
         }
     }
 }
@@ -97,16 +106,22 @@ fn poll_it(state: &Rc<RunnableTransaction<'static>>) {
                     // an `await` on something other than transaction requests. Abort in order to
                     // avoid the default auto-commit behavior.
                     let _ = state.transaction.abort();
-                    let _ = state
-                        .send_polled_forbidden_thing_to
-                        .borrow_mut()
-                        .take()
-                        .map(|tx| tx.send(PolledForbiddenThing));
+                    let _ = (state.polled_forbidden_thing)();
                     panic!("Transaction blocked without any request under way");
                 }
             }
             Poll::Ready(()) => {
-                // Everything went well! We can ignore this
+                // Everything went well! Just signal that we're done
+                let finished = state
+                    .finished
+                    .borrow_mut()
+                    .take()
+                    .expect("Transaction finished multiple times");
+                if finished.send(()).is_err() {
+                    // Transaction aborted by not awaiting on it
+                    let _ = state.transaction.abort();
+                    return;
+                }
             }
         }
     });
