@@ -107,7 +107,6 @@ fn poll_it(state: &Rc<RunnableTransaction<'static>>) {
                     // avoid the default auto-commit behavior.
                     let _ = state.transaction.abort();
                     let _ = (state.polled_forbidden_thing)();
-                    panic!("Transaction blocked without any request under way");
                 }
             }
             Poll::Ready(()) => {
@@ -201,8 +200,7 @@ pub async fn extend_lifetime_to_scope_and_run<'scope, MakerArgs, ScopeRet>(
 
 pub fn add_request(
     req: IdbRequest,
-    success_tx: oneshot::Sender<web_sys::Event>,
-    error_tx: oneshot::Sender<web_sys::Event>,
+    result: &Rc<RefCell<Option<Result<web_sys::Event, web_sys::Event>>>>,
 ) -> impl Sized {
     CURRENT.with(move |state| {
         state
@@ -211,31 +209,25 @@ pub fn add_request(
 
         let on_success = Closure::once({
             let state = state.clone();
+            let result = result.clone();
             move |evt: web_sys::Event| {
                 state
                     .inflight_requests
                     .set(state.inflight_requests.get() - 1);
-                if success_tx.send(evt).is_err() {
-                    // Cancelled transaction by not awaiting on it. Abort the transaction if it has not
-                    // been aborted already.
-                    let _ = state.transaction.abort();
-                }
+                assert!(result.replace(Some(Ok(evt))).is_none());
                 poll_it(&state);
             }
         });
 
         let on_error = Closure::once({
             let state = state.clone();
+            let result = result.clone();
             move |evt: web_sys::Event| {
                 evt.prevent_default(); // Do not abort the transaction, we're dealing with it ourselves
                 state
                     .inflight_requests
                     .set(state.inflight_requests.get() - 1);
-                if error_tx.send(evt).is_err() {
-                    // Cancelled transaction by not awaiting on it. Abort the transaction if it has not
-                    // been aborted already.
-                    let _ = state.transaction.abort();
-                }
+                assert!(result.replace(Some(Err(evt))).is_none());
                 poll_it(&state);
             }
         });

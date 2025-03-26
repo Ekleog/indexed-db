@@ -1,7 +1,7 @@
 use crate::{
     database::OwnedDatabase,
     transaction::unsafe_jar,
-    utils::{generic_request, str_slice_to_array},
+    utils::{non_transaction_request, str_slice_to_array},
     Database, ObjectStore, Transaction,
 };
 use futures_util::{pin_mut, FutureExt};
@@ -77,7 +77,7 @@ impl Factory {
     ///
     /// This internally uses [`IDBFactory::deleteDatabase`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/deleteDatabase)
     pub async fn delete_database(&self, name: &str) -> crate::Result<(), Infallible> {
-        generic_request(
+        non_transaction_request(
             self.sys
                 .delete_database(name)
                 .map_err(crate::Error::from_js_value)?
@@ -141,7 +141,7 @@ impl Factory {
                     on_upgrade_needed.as_ref().dyn_ref::<Function>().unwrap(),
                 ));
 
-                let completion_res = generic_request(open_req.clone().into()).await;
+                let completion_res = non_transaction_request(open_req.clone().into()).await;
                 if ran_upgrade_cb.get() {
                     // The upgrade callback was run, so we need to wait for its result to reach us
                     let _ = finished_rx.await;
@@ -180,7 +180,7 @@ impl Factory {
     pub async fn open_latest_version(&self, name: &str) -> crate::Result<Database, Infallible> {
         let open_req = self.sys.open(name).map_err(crate::Error::from_js_value)?;
 
-        let completion_fut = generic_request(open_req.clone().into())
+        let completion_fut = non_transaction_request(open_req.clone().into())
             .map(|res| res.map_err(crate::Error::from_js_event));
         pin_mut!(completion_fut);
 
