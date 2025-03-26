@@ -3,7 +3,7 @@ use crate::{
     ObjectStore,
 };
 use futures_channel::oneshot;
-use std::marker::PhantomData;
+use std::{cell::RefCell, marker::PhantomData};
 use web_sys::{
     wasm_bindgen::{JsCast, JsValue},
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
@@ -108,24 +108,34 @@ impl TransactionBuilder {
                 Some("InvalidAccessError") => crate::Error::InvalidArgument,
                 _ => crate::Error::from_js_value(err),
             })?;
-        let (result_tx, mut result_rx) = futures_channel::oneshot::channel();
-        let (polled_forbidden_thing_tx, mut polled_forbidden_thing_rx) =
-            futures_channel::oneshot::channel();
+        let result = RefCell::new(None);
+        let result = &result;
+        let (finished_tx, finished_rx) = futures_channel::oneshot::channel();
         unsafe_jar::extend_lifetime_to_scope_and_run(
-            Box::new(move |()| unsafe_jar::RunnableTransaction::new(
-                t.clone(),
-                transaction(Transaction::from_sys(t)),
-                result_tx,
-                polled_forbidden_thing_tx,
-            )),
+            Box::new(move |()| {
+                unsafe_jar::RunnableTransaction::new(
+                    t.clone(),
+                    transaction(Transaction::from_sys(t)),
+                    result,
+                    finished_tx,
+                )
+            }),
             async move |s| {
                 s.run(());
-                futures_util::select! {
-                    res = result_rx => res.expect("Transaction never completed"),
-                    _ = polled_forbidden_thing_rx => panic!("Transaction blocked without any request under way"),
+                let _ = finished_rx.await;
+                let result = result
+                    .borrow_mut()
+                    .take()
+                    .expect("Transaction finished without setting result");
+                match result {
+                    unsafe_jar::TransactionResult::PolledForbiddenThing => {
+                        panic!("Transaction blocked without any request under way")
+                    }
+                    unsafe_jar::TransactionResult::Done(r) => r,
                 }
             },
-        ).await
+        )
+        .await
     }
 }
 
