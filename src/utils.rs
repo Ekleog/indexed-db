@@ -7,7 +7,9 @@ use web_sys::{
     DomException, IdbKeyRange, IdbRequest,
 };
 
-pub(crate) async fn generic_request(req: IdbRequest) -> Result<web_sys::Event, web_sys::Event> {
+pub(crate) async fn non_transaction_request(
+    req: IdbRequest,
+) -> Result<web_sys::Event, web_sys::Event> {
     let (success_tx, success_rx) = oneshot::channel();
     let (error_tx, error_rx) = oneshot::channel();
 
