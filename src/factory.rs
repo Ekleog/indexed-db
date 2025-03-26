@@ -154,7 +154,7 @@ impl Factory {
             .dyn_into::<IdbDatabase>()
             .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
 
-        Ok(OwnedDatabase(Some(Database::from_sys(db))))
+        Ok(OwnedDatabase::make_auto_close(Database::from_sys(db)))
     }
 
     /// Open a database at the latest version

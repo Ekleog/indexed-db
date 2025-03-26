@@ -9,14 +9,14 @@ use web_sys::{
 /// Returns the duration in milliseconds, with the result
 async fn time_it<R>(cb: impl std::future::Future<Output = R>) -> (f64, R) {
     let now = {
-
         let performance = if let Some(window) = web_sys::window() {
             window.performance()
         } else if let Ok(worker_scope) = global().dyn_into::<WorkerGlobalScope>() {
             worker_scope.performance()
         } else {
             None
-        }.expect("No `performance` available (not in a browser environment?)");
+        }
+        .expect("No `performance` available (not in a browser environment?)");
         move || performance.now()
     };
     let start_ms = now();
@@ -34,7 +34,6 @@ async fn close_and_delete_before_reopen() {
     const ITERATIONS: usize = 10;
 
     let (delete_duration_ms, _) = time_it(async {
-
         for _ in 0..ITERATIONS {
             let factory = Factory::get().unwrap();
 
@@ -47,7 +46,6 @@ async fn close_and_delete_before_reopen() {
 
             // Here the database wrapper got dropped which should trigger database close.
         }
-
     })
     .await;
 
