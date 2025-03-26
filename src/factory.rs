@@ -93,7 +93,7 @@ impl Factory {
     ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
-    // TODO: once the never_type feature is stabilized, we can finally stop carrying any `Err` generic
+    // TODO: once the try_trait_v2 feature is stabilized, we can finally stop carrying any `Err` generic
     pub async fn open<Err>(
         &self,
         name: &str,
