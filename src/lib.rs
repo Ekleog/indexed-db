@@ -18,7 +18,7 @@ mod transaction;
 mod utils;
 
 pub use cursor::{Cursor, CursorBuilder, CursorDirection};
-pub use database::Database;
+pub use database::{Database, OwnedDatabase};
 pub use error::{Error, Result};
 pub use factory::{Factory, ObjectStoreBuilder, VersionChangeEvent};
 pub use index::Index;

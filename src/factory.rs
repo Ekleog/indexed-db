@@ -1,7 +1,7 @@
 use crate::{
     transaction::unsafe_jar,
     utils::{non_transaction_request, str_slice_to_array},
-    Database, ObjectStore, Transaction,
+    Database, ObjectStore, OwnedDatabase, Transaction,
 };
 use futures_util::{pin_mut, FutureExt};
 use std::{
@@ -97,13 +97,13 @@ impl Factory {
     ///
     /// This internally uses [`IDBFactory::open`](https://developer.mozilla.org/en-US/docs/Web/API/IDBFactory/open)
     /// as well as the methods from [`IDBOpenDBRequest`](https://developer.mozilla.org/en-US/docs/Web/API/IDBOpenDBRequest)
-    // TODO: once the never_type feature is stabilized, we can finally stop carrying any `Err` generic
+    // TODO: once the try_trait_v2 feature is stabilized, we can finally stop carrying any `Err` generic
     pub async fn open<Err: 'static>(
         &self,
         name: &str,
         version: u32,
         on_upgrade_needed: impl AsyncFnOnce(VersionChangeEvent<Err>) -> crate::Result<(), Err>,
-    ) -> crate::Result<Database, Err> {
+    ) -> crate::Result<OwnedDatabase, Err> {
         if version == 0 {
             return Err(crate::Error::VersionMustNotBeZero);
         }
@@ -163,7 +163,7 @@ impl Factory {
                     .dyn_into::<IdbDatabase>()
                     .expect("Result of successful IDBOpenDBRequest is not an IDBDatabase");
 
-                Ok(Database::from_sys(db))
+                Ok(OwnedDatabase::make_auto_close(Database::from_sys(db)))
             },
         )
         .await
