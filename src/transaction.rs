@@ -173,7 +173,6 @@ pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsVa
     let result = Rc::new(RefCell::new(None));
 
     // Keep the callbacks alive until execution completed
-    // This also means that the tx's will not be dropped, hence the below unwraps
     let _callbacks = unsafe_jar::add_request(req, &result);
 
     match FakeFuture::new(&result).await {
