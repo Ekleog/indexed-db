@@ -1,9 +1,6 @@
 //! All the required to run a transaction
 //!
-//! Originally, this module was used for extracting the `unsafe` implementation details of `transaction`.
-//! Since then, all the code here has been made safe.
-//! However, it is possible that in the future, we'll need more unsafe code, in which case it would likely
-//! have to come here.
+//! This module holds all the `unsafe` implementation details of `transaction`.
 //!
 //! The API exposed from here is entirely safe, and this module's code should be properly audited.
 
