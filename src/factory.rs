@@ -1,8 +1,7 @@
 use crate::{
-    database::OwnedDatabase,
     transaction::{unsafe_jar, RunnableTransaction, TransactionResult},
     utils::{non_transaction_request, str_slice_to_array},
-    Database, ObjectStore, Transaction,
+    Database, ObjectStore, OwnedDatabase, Transaction,
 };
 use futures_util::{pin_mut, FutureExt};
 use std::{
