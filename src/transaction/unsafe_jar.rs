@@ -199,8 +199,8 @@ pub async fn extend_lifetime_to_scope_and_run<'scope, MakerArgs, ScopeRet>(
             //
             // Note: we know this won't spuriously hit because:
             // - we're using `Rc`, so every `RunnableTransaction` operation is single-thread anyway
-            // - when the scope completes, at least `result_rx` or `polled_forbidden_thing_rx` will have resolved
-            // - either of these channels being written to, means that the `RunnableTransaction` has been dropped
+            // - when the scope completes, `finished_rx` will have resolved
+            // - if `finished_tx` has been written to, it means that the `RunnableTransaction` has been dropped
             // Point 2 is enforced outside of the unsafe jar, but it's fine considering it will only result in a spurious panic/abort
             let _ = std::panic::catch_unwind(|| {
                 panic!("Bug in the indexed-db crate: the transaction was not dropped before the end of its lifetime")
