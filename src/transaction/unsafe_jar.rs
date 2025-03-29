@@ -5,7 +5,7 @@
 //! The API exposed from here is entirely safe, and this module's code should be properly audited.
 
 use futures_channel::oneshot;
-use futures_util::{task::noop_waker, FutureExt};
+use futures_util::FutureExt;
 use scoped_tls::scoped_thread_local;
 use std::{
     cell::{Cell, OnceCell, RefCell},
@@ -13,7 +13,7 @@ use std::{
     panic::AssertUnwindSafe,
     pin::Pin,
     rc::{Rc, Weak},
-    task::{Context, Poll},
+    task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
 };
 use web_sys::{
     js_sys::Function,
@@ -69,6 +69,25 @@ impl<'f> RunnableTransaction<'f> {
     }
 }
 
+fn panic_waker() -> Waker {
+    fn clone(_: *const ()) -> RawWaker {
+        RawWaker::new(
+            std::ptr::null(),
+            &RawWakerVTable::new(clone, wake, wake, drop),
+        )
+    }
+    fn wake(_: *const ()) {
+        panic!("IndexedDB transaction tried to await on something other than a request")
+    }
+    fn drop(_: *const ()) {}
+    unsafe {
+        Waker::new(
+            std::ptr::null(),
+            &RawWakerVTable::new(clone, wake, wake, drop),
+        )
+    }
+}
+
 scoped_thread_local!(static CURRENT: Rc<RunnableTransaction<'static>>);
 
 fn poll_it(state: &Rc<RunnableTransaction<'static>>) {
@@ -79,7 +98,7 @@ fn poll_it(state: &Rc<RunnableTransaction<'static>>) {
                 .future
                 .borrow_mut()
                 .as_mut()
-                .poll(&mut Context::from_waker(&noop_waker()))
+                .poll(&mut Context::from_waker(&panic_waker()))
         }));
 
         // Try catching the panic and aborting. This currently does not work in wasm due to panic=abort, but will
