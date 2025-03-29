@@ -168,8 +168,6 @@ impl<'a, T> Future for FakeFuture<'a, T> {
 }
 
 pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsValue> {
-    // TODO: our custom-made channel will not call the waker (because we're handling wakes another way),
-    // so we can use a panicking context again.
     let result = Rc::new(RefCell::new(None));
 
     // Keep the callbacks alive until execution completed
