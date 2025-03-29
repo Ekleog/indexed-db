@@ -15,7 +15,10 @@ use web_sys::{
     IdbDatabase, IdbRequest, IdbTransaction, IdbTransactionMode,
 };
 
+mod runner;
 pub(crate) mod unsafe_jar;
+
+pub use runner::{RunnableTransaction, TransactionResult};
 
 /// Wrapper for [`IDBTransaction`](https://developer.mozilla.org/en-US/docs/Web/API/IDBTransaction)
 #[derive(Debug)]
@@ -119,7 +122,7 @@ impl TransactionBuilder {
         let (finished_tx, finished_rx) = futures_channel::oneshot::channel();
         unsafe_jar::extend_lifetime_to_scope_and_run(
             Box::new(move |()| {
-                unsafe_jar::RunnableTransaction::new(
+                RunnableTransaction::new(
                     t.clone(),
                     transaction(Transaction::from_sys(t)),
                     result,
@@ -134,10 +137,10 @@ impl TransactionBuilder {
                     .take()
                     .expect("Transaction finished without setting result");
                 match result {
-                    unsafe_jar::TransactionResult::PolledForbiddenThing => {
+                    TransactionResult::PolledForbiddenThing => {
                         panic!("Transaction blocked without any request under way")
                     }
-                    unsafe_jar::TransactionResult::Done(r) => r,
+                    TransactionResult::Done(r) => r,
                 }
             },
         )
@@ -171,7 +174,7 @@ pub(crate) async fn transaction_request(req: IdbRequest) -> Result<JsValue, JsVa
     let result = Rc::new(RefCell::new(None));
 
     // Keep the callbacks alive until execution completed
-    let _callbacks = unsafe_jar::add_request(req, &result);
+    let _callbacks = runner::add_request(req, &result);
 
     match FakeFuture::new(&result).await {
         Ok(evt) => {
