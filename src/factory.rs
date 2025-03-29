@@ -1,5 +1,5 @@
 use crate::{
-    transaction::unsafe_jar,
+    transaction::{unsafe_jar, RunnableTransaction, TransactionResult},
     utils::{non_transaction_request, str_slice_to_array},
     Database, ObjectStore, OwnedDatabase, Transaction,
 };
@@ -126,7 +126,7 @@ impl Factory {
                         ran_upgrade_cb.set(true);
                         on_upgrade_needed(event).await
                     };
-                    unsafe_jar::RunnableTransaction::new(transaction, fut, result, finished_tx)
+                    RunnableTransaction::new(transaction, fut, result, finished_tx)
                 },
             ),
             async move |s| {
@@ -149,10 +149,10 @@ impl Factory {
                         .take()
                         .expect("Finished was called without the result being available");
                     match result {
-                        unsafe_jar::TransactionResult::PolledForbiddenThing => {
+                        TransactionResult::PolledForbiddenThing => {
                             panic!("Transaction blocked without any request under way")
                         }
-                        unsafe_jar::TransactionResult::Done(upgrade_res) => upgrade_res?,
+                        TransactionResult::Done(upgrade_res) => upgrade_res?,
                     }
                 }
                 completion_res.map_err(crate::Error::from_js_event)?;
