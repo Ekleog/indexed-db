@@ -24,3 +24,7 @@ pub use factory::{Factory, ObjectStoreBuilder, VersionChangeEvent};
 pub use index::Index;
 pub use object_store::{IndexBuilder, ObjectStore};
 pub use transaction::{Transaction, TransactionBuilder};
+
+const POLLED_FORBIDDEN_THING_PANIC: &str = "Transaction blocked without any request under way.
+The developer probably called .await on something that is not an indexed-db-provided future inside a transaction.
+This would lead the transaction to be committed due to IndexedDB semantics.";

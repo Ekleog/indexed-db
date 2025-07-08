@@ -150,7 +150,7 @@ impl Factory {
                         .expect("Finished was called without the result being available");
                     match result {
                         TransactionResult::PolledForbiddenThing => {
-                            panic!("Transaction blocked without any request under way")
+                            panic!("{}", crate::POLLED_FORBIDDEN_THING_PANIC)
                         }
                         TransactionResult::Done(upgrade_res) => upgrade_res?,
                     }

@@ -138,7 +138,7 @@ impl TransactionBuilder {
                     .expect("Transaction finished without setting result");
                 match result {
                     TransactionResult::PolledForbiddenThing => {
-                        panic!("Transaction blocked without any request under way")
+                        panic!("{}", crate::POLLED_FORBIDDEN_THING_PANIC)
                     }
                     TransactionResult::Done(r) => r,
                 }
