@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.0-alpha.2](https://github.com/Ekleog/indexed-db/compare/v0.5.0-alpha.1...v0.5.0-alpha.2) - 2025-07-08
+## [0.5.0](https://github.com/Ekleog/indexed-db/compare/v0.5.0-alpha.1...v0.5.0) - 2026-05-24
 
 ### Fixed
 
