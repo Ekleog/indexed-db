@@ -13,7 +13,7 @@ pkgs.stdenv.mkDerivation {
       geckodriver
       just
       niv
-      wasm-bindgen-cli_0_2_100
+      wasm-bindgen-cli_0_2_121
       wasm-pack
 
       (fenix.combine (with fenix; [

@@ -45,5 +45,5 @@ console_error_panic_hook = "0.1.7"
 futures = "0.3.30"
 tracing = "0.1.40"
 tracing-wasm = "0.2.1"
-wasm-bindgen-test = "=0.3.50"
+wasm-bindgen-test = "=0.3.72"
 web-sys = { version = "0.3.66", features = ["Performance"] }
