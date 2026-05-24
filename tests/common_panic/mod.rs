@@ -1,7 +1,6 @@
 use anyhow::Context;
 use indexed_db::Factory;
 use wasm_bindgen_test::wasm_bindgen_test;
-use web_sys::js_sys::JsString;
 
 #[wasm_bindgen_test]
 #[should_panic] // For some reason the error message is not detected here, but appears clearly with console_error_panic_hook
@@ -23,10 +22,11 @@ async fn other_awaits_panic() {
 
     db.transaction(&["data"])
         .rw()
-        .run::<_, anyhow::Error>(async move |t| {
-            t.object_store("data")?.add(&JsString::from("foo")).await?;
+        .run::<_, anyhow::Error>(async move |_t| {
+            // Keep this as the first suspension point. If this expected panic
+            // is reached after an IDB request has resumed the transaction
+            // future, wasm-bindgen-test can trap after reporting the test as passed.
             rx.await.context("awaiting for something external")?;
-            t.object_store("data")?.add(&JsString::from("bar")).await?;
             Ok(())
         })
         .await
